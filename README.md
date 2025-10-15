@@ -8,6 +8,7 @@ AgentMesh project - A flexible knowledge base adapter system for integrating mul
 - **PostgreSQL Adapter**: Full CRUD operations with connection pooling
 - **Neo4j Adapter**: Graph database operations (nodes, relationships, Cypher queries)
 - **Operation Registry**: Dynamic operation discovery and execution
+- **MCP Server Integration**: Expose adapters via Model Context Protocol for Claude Desktop
 - **Docker Integration**: Ready-to-use Docker configurations for local development
 - **Comprehensive Testing**: 23 integration tests with real database instances
 
@@ -129,6 +130,9 @@ uv sync --all-extras --all-groups
 │           ├── operations.py          # Neo4j operations
 │           ├── config.yaml            # Neo4j config
 │           └── docker-compose.yaml    # Neo4j Docker setup
+├── mcp_server/
+│   ├── __init__.py                    # MCP server package
+│   └── server.py                      # MCP server implementation
 ├── tests/
 │   └── adapters/
 │       └── knowledge_base/
@@ -139,6 +143,10 @@ uv sync --all-extras --all-groups
 │           └── fixtures/              # Test data and configs
 ├── architectures/                     # Architecture diagrams
 ├── knowledge/                         # Documentation and knowledge base
+├── docker-compose.yaml                # Unified database setup
+├── init-postgres.sql                  # PostgreSQL sample data
+├── claude_desktop_config.json         # Reference Claude Desktop config
+├── MCP_SETUP.md                       # MCP server setup guide
 ├── .pre-commit-config.yaml            # Pre-commit hooks configuration
 ├── pyproject.toml                     # Project dependencies and configuration
 ├── pytest.ini                         # Pytest configuration
@@ -212,17 +220,57 @@ await adapter.disconnect()
 ### Running Local Databases
 
 ```bash
-# Start PostgreSQL
-cd adapters/knowledge_base/postgres
+# Start both PostgreSQL and Neo4j (unified setup)
 docker-compose up -d
 
-# Start Neo4j
-cd adapters/knowledge_base/neo4j
-docker-compose up -d
+# Check database status
+docker-compose ps
 
 # Stop databases
+docker-compose down
+
+# Stop and remove all data
 docker-compose down -v
 ```
+
+## MCP Server Integration
+
+AgentMesh includes a Model Context Protocol (MCP) server that exposes the knowledge base adapters to Claude Desktop and other MCP clients.
+
+### Quick Start with MCP
+
+```bash
+# 1. Start databases
+docker-compose up -d
+
+# 2. Configure Claude Desktop
+# Edit ~/Library/Application Support/Claude/claude_desktop_config.json
+# Add the agentmesh MCP server configuration
+
+# 3. Restart Claude Desktop
+```
+
+**For detailed MCP setup instructions, see [MCP_SETUP.md](MCP_SETUP.md)**
+
+### MCP Features
+
+- **8 Auto-generated Tools**: 4 PostgreSQL + 4 Neo4j operations
+- **4 Resources**: Database status, operations metadata, schema discovery
+- **Dynamic Discovery**: Tools are automatically generated from adapter operations
+- **Testing Support**: Use MCP Inspector to test tools and resources
+
+### Example MCP Usage in Claude
+
+Once configured, you can ask Claude:
+
+```
+"Show me all users in the PostgreSQL database"
+"Create a Person node in Neo4j for John Doe, age 35"
+"What tables exist in the database?"
+"Query all projects and their owners"
+```
+
+Claude will automatically use the appropriate MCP tools to interact with your databases.
 
 ## Contributing
 
