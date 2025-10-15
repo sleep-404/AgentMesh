@@ -1,0 +1,7 @@
+host: localhost
+port: 5433
+user: postgres
+password: password
+database: agent_mesh_test
+pool_min_size: 1
+pool_max_size: 5

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    ports:
+      - "5433:5432"  # Use different port to avoid conflict
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: agent_mesh_test
+    volumes:
+      - ./fixtures/postgres_data.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  neo4j-test:
+    image: neo4j:5-community
+    ports:
+      - "7475:7474"  # HTTP - Use different port to avoid conflict
+      - "7688:7687"  # Bolt - Use different port to avoid conflict
+    environment:
+      NEO4J_AUTH: neo4j/password
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - neo4j_test_data:/data
+
+volumes:
+  neo4j_test_data:
