@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lyzr-hackathon"
+version = "0.1.0"
+description = "Lyzr Hackathon Project"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools]
+packages = []
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 88
+select = ["E", "W", "F", "I", "B", "C4", "UP"]
+ignore = ["E501"]
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3.0",
+]
