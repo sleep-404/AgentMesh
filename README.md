@@ -5,7 +5,7 @@ AgentMesh project.
 ## Prerequisites
 
 - Python 3.11 or higher
-- uv (recommended package manager)
+- uv package manager
 
 ## Installation
 
@@ -18,12 +18,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ### Setup Project
 
 ```bash
-# Create a virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Sync dependencies and create virtual environment automatically
+uv sync --all-extras --all-groups
 
-# Install dev dependencies (for pre-commit, linting, formatting)
-uv pip install -e ".[dev]"
+# This will:
+# - Create .venv automatically
+# - Install all dependencies and dev dependencies
+# - Create/update uv.lock file
 ```
 
 ## Development
@@ -33,33 +34,43 @@ uv pip install -e ".[dev]"
 Set up pre-commit hooks to ensure code quality:
 
 ```bash
-# Activate virtual environment first
-source .venv/bin/activate
-
 # Install pre-commit hooks
-pre-commit install
+uv run pre-commit install
 
 # Run hooks manually on all files
-pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 ### Code Formatting
 
 ```bash
 # Format code with black
-black .
+uv run black .
 
 # Lint code with ruff
-ruff check .
+uv run ruff check .
 
 # Type check with mypy
-mypy .
+uv run mypy .
 ```
 
 ### Running Tests
 
 ```bash
-pytest
+uv run pytest
+```
+
+### Adding Dependencies
+
+```bash
+# Add a production dependency
+uv add package-name
+
+# Add a development dependency
+uv add --group dev package-name
+
+# Sync after manually editing pyproject.toml
+uv sync --all-extras --all-groups
 ```
 
 ## Project Structure
