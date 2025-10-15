@@ -1,5 +1,5 @@
 host: localhost
 port: 7687
 user: neo4j
-password: password
+password: admin123
 database: neo4j

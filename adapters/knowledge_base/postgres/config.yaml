@@ -1,7 +1,7 @@
 host: localhost
 port: 5432
-user: postgres
-password: password
-database: agent_mesh
-pool_min_size: 2
+user: admin
+password: admin123
+database: agentmesh
+pool_min_size: 1
 pool_max_size: 10
