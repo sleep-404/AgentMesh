@@ -1,11 +1,21 @@
 # AgentMesh
 
-AgentMesh project.
+AgentMesh project - A flexible knowledge base adapter system for integrating multiple database backends.
+
+## Features
+
+- **Extensible Adapter System**: Base adapter interface for building knowledge base integrations
+- **PostgreSQL Adapter**: Full CRUD operations with connection pooling
+- **Neo4j Adapter**: Graph database operations (nodes, relationships, Cypher queries)
+- **Operation Registry**: Dynamic operation discovery and execution
+- **Docker Integration**: Ready-to-use Docker configurations for local development
+- **Comprehensive Testing**: 23 integration tests with real database instances
 
 ## Prerequisites
 
 - Python 3.11 or higher
 - uv package manager
+- Docker and Docker Compose (for running tests and local databases)
 
 ## Installation
 
@@ -56,9 +66,34 @@ uv run mypy .
 
 ### Running Tests
 
+The test suite includes integration tests that spin up real PostgreSQL and Neo4j databases using Docker.
+
+**Important**: Make sure Docker is running before executing tests.
+
 ```bash
+# Run all tests (requires Docker)
 uv run pytest
+
+# Run specific test file
+uv run pytest tests/adapters/knowledge_base/test_postgres.py
+
+# Run with verbose output
+uv run pytest -v
+
+# Run with output from print statements
+uv run pytest -v -s
+
+# Run specific test
+uv run pytest tests/adapters/knowledge_base/test_postgres.py::test_health
 ```
+
+**What happens during test execution:**
+1. Docker containers for PostgreSQL and Neo4j are automatically started
+2. Tests wait for databases to be healthy
+3. All tests run against real database instances
+4. Containers are automatically cleaned up after tests complete
+
+**Note**: The first test run may take a few minutes while Docker images are downloaded.
 
 ### Adding Dependencies
 
@@ -77,25 +112,131 @@ uv sync --all-extras --all-groups
 
 ```
 .
-├── architectures/        # Architecture diagrams
-├── knowledge/           # Documentation and knowledge base
-├── src/                 # Source code (to be created)
-├── tests/              # Test files (to be created)
-├── .env                # Environment variables (create this)
-├── .gitignore          # Git ignore patterns
-├── .pre-commit-config.yaml  # Pre-commit hooks configuration
-├── pyproject.toml      # Project dependencies and configuration
-└── README.md           # This file
+├── adapters/
+│   └── knowledge_base/
+│       ├── base.py                    # Base adapter interface
+│       ├── registry.py                # Operation registry
+│       ├── schemas.py                 # Common Pydantic schemas
+│       ├── exceptions.py              # Structured exceptions
+│       ├── config.py                  # YAML config loader
+│       ├── postgres/
+│       │   ├── adapter.py             # PostgreSQL adapter
+│       │   ├── operations.py          # PostgreSQL operations
+│       │   ├── config.yaml            # PostgreSQL config
+│       │   └── docker-compose.yaml    # PostgreSQL Docker setup
+│       └── neo4j/
+│           ├── adapter.py             # Neo4j adapter
+│           ├── operations.py          # Neo4j operations
+│           ├── config.yaml            # Neo4j config
+│           └── docker-compose.yaml    # Neo4j Docker setup
+├── tests/
+│   └── adapters/
+│       └── knowledge_base/
+│           ├── conftest.py            # Test fixtures and setup
+│           ├── test_postgres.py       # PostgreSQL tests (10 tests)
+│           ├── test_neo4j.py          # Neo4j tests (13 tests)
+│           ├── docker-compose.test.yaml  # Test database setup
+│           └── fixtures/              # Test data and configs
+├── architectures/                     # Architecture diagrams
+├── knowledge/                         # Documentation and knowledge base
+├── .pre-commit-config.yaml            # Pre-commit hooks configuration
+├── pyproject.toml                     # Project dependencies and configuration
+├── pytest.ini                         # Pytest configuration
+└── README.md                          # This file
+```
+
+## Usage Examples
+
+### PostgreSQL Adapter
+
+```python
+from adapters.knowledge_base.postgres.adapter import PostgresAdapter
+
+# Initialize adapter
+adapter = PostgresAdapter("adapters/knowledge_base/postgres/config.yaml")
+await adapter.connect()
+
+# Discover available operations
+operations = adapter.get_operations()
+print(operations.keys())  # ['sql_query', 'insert', 'update', 'delete']
+
+# Execute a query
+result = await adapter.execute(
+    "sql_query",
+    query="SELECT * FROM users WHERE role = $1",
+    params={"role": "admin"}
+)
+
+# Insert data
+result = await adapter.execute(
+    "insert",
+    table="users",
+    data={"username": "john", "email": "john@example.com"}
+)
+
+await adapter.disconnect()
+```
+
+### Neo4j Adapter
+
+```python
+from adapters.knowledge_base.neo4j.adapter import Neo4jAdapter
+
+# Initialize adapter
+adapter = Neo4jAdapter("adapters/knowledge_base/neo4j/config.yaml")
+await adapter.connect()
+
+# Create a node
+result = await adapter.execute(
+    "create_node",
+    labels=["Person"],
+    properties={"name": "Alice", "age": 30}
+)
+
+# Execute Cypher query
+result = await adapter.execute(
+    "cypher_query",
+    query="MATCH (p:Person) RETURN p.name, p.age"
+)
+
+# Find nodes
+result = await adapter.execute(
+    "find_node",
+    labels=["Person"],
+    properties={"age": 30}
+)
+
+await adapter.disconnect()
+```
+
+### Running Local Databases
+
+```bash
+# Start PostgreSQL
+cd adapters/knowledge_base/postgres
+docker-compose up -d
+
+# Start Neo4j
+cd adapters/knowledge_base/neo4j
+docker-compose up -d
+
+# Stop databases
+docker-compose down -v
 ```
 
 ## Contributing
 
 1. Create a feature branch
 2. Make your changes
-3. Run pre-commit hooks: `pre-commit run --all-files`
-4. Run tests: `pytest`
-5. Commit your changes with conventional commits format
-6. Submit a pull request
+3. Run pre-commit hooks: `uv run pre-commit run --all-files`
+4. Ensure Docker is running
+5. Run tests: `uv run pytest`
+6. Commit your changes with conventional commits format
+   - `feat:` for new features
+   - `fix:` for bug fixes
+   - `test:` for adding tests
+   - `chore:` for maintenance tasks
+7. Submit a pull request
 
 ## License
 
