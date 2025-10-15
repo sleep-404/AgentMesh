@@ -1,6 +1,6 @@
-# Lyzr Hackathon
+# AgentMesh
 
-A project for the Lyzr Hackathon.
+AgentMesh project.
 
 ## Prerequisites
 

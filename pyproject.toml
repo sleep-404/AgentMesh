@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lyzr-hackathon"
+name = "agentmesh"
 version = "0.1.0"
-description = "Lyzr Hackathon Project"
+description = "AgentMesh Project"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
