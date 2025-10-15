@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentmesh-postgres
+    environment:
+      POSTGRES_DB: agentmesh
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Persistent data storage
+      - ./init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Initial data script (runs only once)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d agentmesh"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: agentmesh-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/admin123
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j_data:/data              # Persistent data storage
+      - neo4j_logs:/logs              # Persistent logs
+      - ./init-neo4j.cypher:/init-data/init-neo4j.cypher:ro  # Initial data script
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  neo4j-init:
+    image: neo4j:5.15-community
+    container_name: agentmesh-neo4j-init
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - ./init-neo4j.cypher:/init-data/init-neo4j.cypher:ro
+      - ./init-neo4j.sh:/init-neo4j.sh:ro
+    entrypoint: ["/bin/bash", "/init-neo4j.sh"]
+    restart: "no"
+    network_mode: "service:neo4j"
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:
