@@ -1,4 +1,4 @@
-*.md
+knowledge/*.md
 TODO
 .cursor/
 *.png
