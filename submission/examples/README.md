@@ -335,7 +335,8 @@ import sys
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from services.registry.agent_service import AgentService
 from adapters.persistence.sqlite.adapter import SQLitePersistenceAdapter
@@ -349,7 +350,7 @@ async def main():
 
     # Initialize services
     persistence = SQLitePersistenceAdapter(
-        "adapters/persistence/sqlite/config.yaml"
+        str(PROJECT_ROOT / "adapters/persistence/sqlite/config.yaml")
     )
     await persistence.connect()
 
