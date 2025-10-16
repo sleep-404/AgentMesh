@@ -66,15 +66,7 @@ async def initialize_adapters():
     )
     await persistence_adapter.connect()
 
-    logger.info("Initializing PostgreSQL adapter...")
-    postgres_adapter = PostgresAdapter("adapters/knowledge_base/postgres/config.yaml")
-    await postgres_adapter.connect()
-
-    logger.info("Initializing Neo4j adapter...")
-    neo4j_adapter = Neo4jAdapter("adapters/knowledge_base/neo4j/config.yaml")
-    await neo4j_adapter.connect()
-
-    # Initialize NATS client (optional - will fail silently if NATS not available)
+    # Initialize NATS client FIRST (optional - will fail silently if NATS not available)
     logger.info("Initializing NATS client...")
     nats_client = NATSWrapper()
     try:
@@ -84,6 +76,23 @@ async def initialize_adapters():
         logger.warning(f"NATS client not available: {e}")
         logger.warning("Registry services will work without real-time notifications")
         nats_client = None
+
+    # Now initialize KB adapters WITH NATS client
+    logger.info("Initializing PostgreSQL adapter...")
+    postgres_adapter = PostgresAdapter(
+        "adapters/knowledge_base/postgres/config.yaml",
+        nats_client=nats_client,
+        kb_id="postgres-kb-1",  # Default KB ID for demo
+    )
+    await postgres_adapter.connect()
+
+    logger.info("Initializing Neo4j adapter...")
+    neo4j_adapter = Neo4jAdapter(
+        "adapters/knowledge_base/neo4j/config.yaml",
+        nats_client=nats_client,
+        kb_id="neo4j-kb-1",  # Default KB ID for demo
+    )
+    await neo4j_adapter.connect()
 
     # Initialize OPA client (optional - will fail silently if OPA not available)
     logger.info("Initializing OPA client...")
@@ -119,8 +128,9 @@ async def initialize_adapters():
             opa_client=opa_client,
             persistence=persistence_adapter,
             kb_adapters=kb_adapters,
+            nats_client=nats_client,  # Pass NATS for message broker pattern
         )
-        logger.info("Enforcement service initialized with OPA")
+        logger.info("Enforcement service initialized with OPA and NATS")
     else:
         logger.warning("Enforcement service not available without OPA")
 
@@ -135,6 +145,17 @@ async def initialize_adapters():
         logger.info("Request router started")
     else:
         logger.warning("Request router not available (requires NATS and OPA)")
+
+    # Start KB adapters listening on NATS (message broker pattern)
+    if nats_client:
+        logger.info("Starting KB adapters on NATS...")
+        if postgres_adapter:
+            await postgres_adapter.start_listening()
+        if neo4j_adapter:
+            await neo4j_adapter.start_listening()
+        logger.info("KB adapters listening on NATS subjects")
+    else:
+        logger.warning("KB adapters not listening on NATS (NATS not available)")
 
     logger.info("Starting health monitoring...")
     await health_service.start_monitoring(interval_seconds=30)

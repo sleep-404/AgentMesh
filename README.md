@@ -532,10 +532,11 @@ docker-compose down -v
 
 ## NATS Messaging Integration
 
-AgentMesh includes a NATS-based messaging layer that enables real-time agent-to-agent communication and discovery.
+AgentMesh includes a NATS-based messaging layer that enables real-time agent-to-agent communication, discovery, and the message broker pattern for KB operations.
 
-### Architecture
+### Architecture Overview
 
+**Directory & Discovery (Pub/Sub):**
 ```
 Agent/KB Registration (via MCP)
        ↓
@@ -548,23 +549,103 @@ Directory Subscriber receives & caches
 All subscribed agents notified in real-time
 ```
 
+**KB Operations (Request-Reply Message Broker):**
+```
+User/Agent → EnforcementService → NATS: {kb_id}.adapter.query
+                    ↓                          ↓
+            [Authorization]               KB Adapter
+                    ↓                     [Execute Query]
+                    ↓                          ↓
+            [Masking] ←──── Raw Response ─────┘
+                    ↓
+            Masked Response → User/Agent
+```
+
+### Message Broker Pattern for KB Operations
+
+AgentMesh implements the correct mesh architecture where:
+- **Authorization happens in the mesh layer** (EnforcementService)
+- **Masking happens in the mesh layer** (EnforcementService)
+- **KB Adapters only execute queries** (no governance logic)
+- **Communication flows through NATS** request-reply pattern
+
+**Key architectural principle**: KB adapters are simple data access components. All governance (authorization, masking, audit) is centralized in the mesh layer (EnforcementService).
+
+#### How It Works
+
+1. **EnforcementService receives request** from user/agent
+2. **Policy evaluation via OPA** determines access permissions and masking rules
+3. **NATS request sent to KB adapter** on subject `{kb_id}.adapter.query`
+4. **KB adapter executes query** and returns raw, unmasked data
+5. **EnforcementService applies masking** based on policy rules
+6. **Audit event logged** to persistence
+7. **Masked response returned** to requester
+
+#### NATS Subjects for KB Operations
+
+- **`{kb_id}.adapter.query`**: Each KB adapter listens on its own subject
+  - Example: `postgres-kb-1.adapter.query`, `neo4j-kb-1.adapter.query`
+- **Message format**:
+  ```json
+  {
+    "operation": "sql_query",
+    "params": {
+      "query": "SELECT * FROM users WHERE id = $1",
+      "params": {"id": 123}
+    }
+  }
+  ```
+- **Response format**:
+  ```json
+  {
+    "status": "success",
+    "data": {
+      "rows": [...],
+      "row_count": 10
+    }
+  }
+  ```
+
 ### Starting the Messaging Layer
 
 ```bash
-# 1. Start NATS server (included in docker-compose)
-docker-compose up -d nats
+# 1. Start required services
+docker-compose up -d nats postgres neo4j opa
 
-# 2. Start the directory subscriber (handles directory queries and caching)
+# 2. Start the MCP server (KB adapters automatically listen on NATS)
+uv run mcp-server-agentmesh
+
+# 3. Test the NATS message broker pattern (optional)
+python examples/test_nats_basic.py
+
+# 4. Start the directory subscriber (handles directory queries and caching)
 python -m services.directory.subscriber
 
-# 3. Run the sample agent (demonstrates discovery and notifications)
+# 5. Run the sample agent (demonstrates discovery and notifications)
 python -m examples.sample_agent
 ```
 
+**What happens when MCP server starts:**
+1. NATS client connects to `localhost:4222`
+2. PostgreSQL adapter initialized with NATS client and `kb_id="postgres-kb-1"`
+3. Neo4j adapter initialized with NATS client and `kb_id="neo4j-kb-1"`
+4. Both adapters start listening on their NATS subjects:
+   - `postgres-kb-1.adapter.query`
+   - `neo4j-kb-1.adapter.query`
+5. EnforcementService initialized with NATS client for request-reply pattern
+6. All KB operations flow through NATS with proper authorization/masking
+
 ### NATS Subjects
 
-- **`mesh.directory.updates`**: Broadcasts all agent/KB registration events
-- **`mesh.directory.query`**: Request-response for directory listings
+**Directory & Discovery:**
+- **`mesh.directory.updates`**: Broadcasts all agent/KB registration events (pub/sub)
+- **`mesh.directory.query`**: Request-response for directory listings (request-reply)
+
+**KB Operations (Message Broker Pattern):**
+- **`{kb_id}.adapter.query`**: Each KB adapter listens for governed query requests (request-reply)
+  - EnforcementService sends authorized requests
+  - KB adapter executes and returns raw data
+  - EnforcementService applies masking before forwarding to requester
 
 ### Message Formats
 
@@ -654,9 +735,49 @@ print(f"Found {len(response['agents'])} agents")
 print(f"Found {len(response['kbs'])} KBs")
 ```
 
-### What Gets Notified
+### Testing the NATS Implementation
 
-**✅ Currently Implemented:**
+**Basic NATS Pattern Test:**
+```bash
+# Verify NATS request-reply works with KB adapters
+python examples/test_nats_basic.py
+```
+
+This test verifies:
+- ✅ NATS connection successful
+- ✅ KB adapter initialized with NATS client
+- ✅ Adapter listening on NATS subject (`test-kb.adapter.query`)
+- ✅ Request-reply pattern working (query sent via NATS, response received)
+
+**Testing with MCP (via Claude Desktop):**
+When you use the `query_kb_governed` tool in Claude:
+1. Request flows through EnforcementService
+2. Policy evaluated via OPA
+3. Request sent to KB adapter via NATS
+4. Raw response returned via NATS
+5. Response masked by EnforcementService
+6. Masked data returned to Claude
+
+**Logs to watch:**
+```bash
+# See NATS messages flowing
+docker-compose logs -f nats
+
+# Watch KB adapter receiving requests
+# (visible in MCP server logs when running)
+```
+
+### What's Implemented
+
+**✅ Message Broker Pattern for KB Operations:**
+- NATS request-reply between EnforcementService and KB adapters
+- KB adapters listen on `{kb_id}.adapter.query` subjects
+- Authorization in mesh layer (EnforcementService)
+- Masking in mesh layer (EnforcementService)
+- KB adapters only execute queries (no governance logic)
+- Proper separation of concerns per mesh.md design
+
+**✅ Directory & Discovery (Pub/Sub):**
 - New agent registrations
 - New KB registrations
 - Real-time directory updates
@@ -664,7 +785,7 @@ print(f"Found {len(response['kbs'])} KBs")
 **❌ Not Yet Implemented:**
 - Agent capability updates
 - Agent/KB deregistration
-- Health status changes
+- Health status changes via NATS
 
 ### Service Discovery Example
 

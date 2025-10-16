@@ -66,13 +66,15 @@ class NATSWrapper:
         self,
         subject: str,
         callback: Callable[[dict[str, Any]], None]
-        | Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
+        | Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
+        | Callable[[dict[str, Any]], Coroutine[Any, Any, dict[str, Any]]],
     ) -> None:
         """Subscribe to a subject with a callback function.
 
         Args:
             subject: NATS subject to subscribe to
             callback: Callback function (sync or async) to handle received messages
+                     If async callback returns a dict, it will be sent as a reply (request-reply pattern)
         """
         if not self.nc:
             logger.error("Not connected to NATS")
@@ -82,13 +84,27 @@ class NATSWrapper:
             try:
                 data = json.loads(msg.data.decode())
                 logger.debug(f"Received on {subject}: {data}")
-                # Run callback in executor to avoid blocking
+
+                # Run callback
                 if asyncio.iscoroutinefunction(callback):
-                    await callback(data)
+                    result = await callback(data)
+
+                    # If callback returns a result and message has reply subject, send response
+                    if result is not None and msg.reply and self.nc:
+                        reply_payload = json.dumps(result).encode()
+                        await self.nc.publish(msg.reply, reply_payload)
+                        logger.debug(f"Sent reply to {msg.reply}: {result}")
                 else:
                     callback(data)
             except Exception as e:
                 logger.error(f"Error handling message on {subject}: {e}")
+
+                # Send error response if this is a request-reply
+                if msg.reply and self.nc:
+                    error_response = {"status": "error", "error": str(e)}
+                    await self.nc.publish(
+                        msg.reply, json.dumps(error_response).encode()
+                    )
 
         try:
             sub = await self.nc.subscribe(subject, cb=message_handler)

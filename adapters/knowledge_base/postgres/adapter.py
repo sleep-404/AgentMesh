@@ -22,14 +22,16 @@ from .operations import (
 class PostgresAdapter(BaseKBAdapter):
     """PostgreSQL adapter for Knowledge Base operations."""
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, nats_client=None, kb_id: str | None = None):
         """Initialize PostgreSQL adapter.
 
         Args:
             config_path: Path to the configuration file
+            nats_client: Optional NATS client for message broker pattern
+            kb_id: Optional KB identifier for NATS subject routing
         """
         self.pool: asyncpg.Pool | None = None
-        super().__init__(config_path)
+        super().__init__(config_path, nats_client, kb_id)
 
     async def connect(self):
         """Establish connection pool to PostgreSQL."""

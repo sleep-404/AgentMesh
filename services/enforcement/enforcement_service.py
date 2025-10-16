@@ -6,6 +6,7 @@ from typing import Any
 
 from adapters.knowledge_base.neo4j.adapter import Neo4jAdapter
 from adapters.knowledge_base.postgres.adapter import PostgresAdapter
+from adapters.messaging.nats_client import NATSWrapper
 from adapters.persistence.base import BasePersistenceAdapter
 from adapters.persistence.schemas import AuditEvent, AuditEventType, AuditOutcome
 from adapters.policy.opa_client import OPAClient
@@ -30,17 +31,21 @@ class EnforcementService:
         opa_client: OPAClient,
         persistence: BasePersistenceAdapter,
         kb_adapters: dict[str, PostgresAdapter | Neo4jAdapter],
+        nats_client: NATSWrapper | None = None,
     ):
         """Initialize enforcement service.
 
         Args:
             opa_client: OPA client for policy evaluation
             persistence: Persistence adapter for audit logging and registry lookups
-            kb_adapters: Dictionary mapping kb_type -> adapter instance
+            kb_adapters: Dictionary mapping kb_type -> adapter instance (for fallback)
+            nats_client: Optional NATS client for message broker pattern
         """
         self.opa = opa_client
         self.persistence = persistence
         self.kb_adapters = kb_adapters
+        self.nats = nats_client
+        self.use_nats = nats_client is not None
 
     async def enforce_kb_access(
         self,
@@ -105,15 +110,21 @@ class EnforcementService:
 
             # Step 4: Execute operation on KB
             masking_rules = decision.get("masking_rules", [])
-            kb_adapter = self.kb_adapters.get(kb_record.kb_type)
 
-            if not kb_adapter:
-                raise Exception(f"No adapter found for KB type: {kb_record.kb_type}")
-
-            # Execute the operation
-            raw_response = await self._execute_kb_operation(
-                kb_adapter, operation, params
-            )
+            # Use NATS if available, otherwise fall back to direct adapter calls
+            if self.use_nats:
+                logger.debug(f"Using NATS request-reply for KB {kb_id}")
+                raw_response = await self._execute_kb_via_nats(kb_id, operation, params)
+            else:
+                logger.debug(f"Using direct adapter call for KB {kb_id}")
+                kb_adapter = self.kb_adapters.get(kb_record.kb_type)
+                if not kb_adapter:
+                    raise Exception(
+                        f"No adapter found for KB type: {kb_record.kb_type}"
+                    )
+                raw_response = await self._execute_kb_operation(
+                    kb_adapter, operation, params
+                )
 
             # Step 5: Apply masking to response
             masked_response = self._apply_masking(raw_response, masking_rules)
@@ -220,13 +231,66 @@ class EnforcementService:
             await self._log_error(source_agent_id, target_agent_id, "invoke", str(e))
             raise
 
+    async def _execute_kb_via_nats(
+        self,
+        kb_id: str,
+        operation: str,
+        params: dict[str, Any],
+    ) -> Any:
+        """
+        Execute KB operation via NATS request-reply pattern.
+
+        This implements the mesh architecture where:
+        1. Enforcement service sends request to: {kb_id}.adapter.query
+        2. KB adapter receives, executes (no auth/masking), and replies with raw data
+        3. Enforcement service receives raw response for masking
+
+        Args:
+            kb_id: Target KB identifier
+            operation: Operation to perform
+            params: Operation parameters
+
+        Returns:
+            Raw response from KB adapter
+        """
+        if not self.nats:
+            raise Exception("NATS client not available for KB communication")
+
+        # Construct NATS subject for this KB adapter
+        adapter_subject = f"{kb_id}.adapter.query"
+
+        # Prepare request message
+        request_msg = {"operation": operation, "params": params}
+
+        logger.info(f"Sending NATS request to {adapter_subject}: operation={operation}")
+
+        try:
+            # Send request-reply via NATS (5 second timeout)
+            response = await self.nats.request(adapter_subject, request_msg, timeout=5)
+
+            if not response:
+                raise Exception(f"No response from KB adapter on {adapter_subject}")
+
+            # Parse response
+            if response.get("status") == "error":
+                raise Exception(f"KB adapter error: {response.get('error')}")
+
+            # Return raw data from adapter
+            return response.get("data")
+
+        except Exception as e:
+            logger.error(f"NATS request to {adapter_subject} failed: {e}")
+            raise Exception(
+                f"Failed to communicate with KB adapter via NATS: {e}"
+            ) from e
+
     async def _execute_kb_operation(
         self,
         kb_adapter: PostgresAdapter | Neo4jAdapter,
         operation: str,
         params: dict[str, Any],
     ) -> Any:
-        """Execute operation on KB adapter."""
+        """Execute operation on KB adapter (direct call fallback)."""
         # Map operation to adapter method
         if operation in ["sql_query", "query"]:
             return await kb_adapter.execute(

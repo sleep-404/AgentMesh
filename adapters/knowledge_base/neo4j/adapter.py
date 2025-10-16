@@ -22,14 +22,16 @@ from .operations import (
 class Neo4jAdapter(BaseKBAdapter):
     """Neo4j adapter for Knowledge Base operations."""
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, nats_client=None, kb_id: str | None = None):
         """Initialize Neo4j adapter.
 
         Args:
             config_path: Path to the configuration file
+            nats_client: Optional NATS client for message broker pattern
+            kb_id: Optional KB identifier for NATS subject routing
         """
         self.driver: AsyncDriver | None = None
-        super().__init__(config_path)
+        super().__init__(config_path, nats_client, kb_id)
 
     async def connect(self):
         """Establish connection to Neo4j."""
