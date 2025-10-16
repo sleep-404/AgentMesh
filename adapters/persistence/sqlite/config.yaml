@@ -1,0 +1,17 @@
+adapter:
+  type: "sqlite"
+  version: "1.0.0"
+
+database:
+  path: "data/agentmesh.db"  # Relative to project root
+
+  # SQLite-specific settings
+  journal_mode: "WAL"  # Write-Ahead Logging for better concurrency
+  synchronous: "NORMAL"
+
+audit:
+  # Retention policy (adapter handles cleanup)
+  retention_days: 90
+
+  # Log level (lightweight/medium/heavy)
+  default_level: "lightweight"

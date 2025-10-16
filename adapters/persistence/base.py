@@ -4,6 +4,7 @@ Base persistence adapter interface.
 Mesh uses this interface; adapters implement storage logic.
 """
 from abc import ABC, abstractmethod
+from typing import Any
 
 from .schemas import (
     AgentRecord,
@@ -33,7 +34,7 @@ class BasePersistenceAdapter(ABC):
     def __init__(self, config_path: str):
         """Initialize adapter with config"""
         self.config_path = config_path
-        self.config = None
+        self.config: dict[str, Any] | None = None
 
     # ============================================
     # CONNECTION LIFECYCLE
