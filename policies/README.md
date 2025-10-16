@@ -62,7 +62,44 @@ curl -X POST http://localhost:8181/v1/data/agentmesh/decision \
 
 ## Policy Extension
 
-To add new policies:
+### Option 1: Dynamic Policy Management (Recommended)
+
+AgentMesh now supports dynamic policy management through MCP tools:
+
+```python
+# Using the OPA client directly
+from adapters.policy.opa_client import OPAClient
+
+opa_client = OPAClient()
+
+# Upload a new policy
+policy_content = """
+package my_custom_policy
+
+default allow = false
+
+allow {
+    input.action == "read"
+}
+"""
+
+result = await opa_client.upload_policy("my_custom_policy", policy_content)
+
+# List all policies
+policies = await opa_client.list_policies()
+
+# Get a specific policy
+policy = await opa_client.get_policy("my_custom_policy")
+
+# Delete a policy
+result = await opa_client.delete_policy("my_custom_policy")
+```
+
+See `POLICY_MANAGEMENT.md` in the root directory for full documentation.
+
+### Option 2: Static Policy Files
+
+To add static policies:
 
 1. Create a new `.rego` file in this directory
 2. Use the `package agentmesh` declaration
