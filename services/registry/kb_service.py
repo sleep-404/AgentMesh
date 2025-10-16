@@ -32,14 +32,20 @@ SUPPORTED_KB_TYPES = ["postgres", "neo4j"]
 class KBService:
     """Service for managing KB registration and lifecycle"""
 
-    def __init__(self, persistence_adapter: BasePersistenceAdapter):
+    def __init__(
+        self,
+        persistence_adapter: BasePersistenceAdapter,
+        nats_client: object | None = None,
+    ):
         """
         Initialize KB service.
 
         Args:
             persistence_adapter: Persistence adapter for storing KB records
+            nats_client: Optional NATS client for publishing notifications
         """
         self.persistence = persistence_adapter
+        self.nats_client = nats_client
 
     async def register_kb(
         self, request: KBRegistrationRequest
@@ -111,7 +117,7 @@ class KBService:
             if connectivity_status == HealthStatus.OFFLINE.value:
                 message += f" (Warning: {error_msg})"
 
-            return KBRegistrationResponse(
+            response = KBRegistrationResponse(
                 kb_record_id=kb_record_id,
                 kb_id=request.kb_id,
                 kb_type=request.kb_type,
@@ -119,6 +125,12 @@ class KBService:
                 registered_at=datetime.now(UTC),
                 message=message,
             )
+
+            # Publish notification to NATS if client is available
+            if self.nats_client and self.nats_client.is_connected:
+                await self._publish_kb_registered(request, connectivity_status)
+
+            return response
         except DuplicateRecordError as e:
             raise DuplicateKBError(request.kb_id) from e
 
@@ -325,3 +337,29 @@ class KBService:
 
         await self.persistence.deregister_kb(kb_id)
         logger.info(f"KB '{kb_id}' deregistered successfully")
+
+    async def _publish_kb_registered(
+        self, request: KBRegistrationRequest, status: str
+    ) -> None:
+        """
+        Publish KB registration notification to NATS.
+
+        Args:
+            request: KB registration request
+            status: Health status
+        """
+        try:
+            notification = {
+                "type": "kb_registered",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "kb_id": request.kb_id,
+                    "kb_type": request.kb_type,
+                    "operations": request.operations,
+                    "status": status,
+                },
+            }
+            await self.nats_client.publish("mesh.directory.updates", notification)
+            logger.debug(f"Published KB registration notification for {request.kb_id}")
+        except Exception as e:
+            logger.error(f"Failed to publish KB registration notification: {e}")

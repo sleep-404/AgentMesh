@@ -55,6 +55,22 @@ services:
     network_mode: "service:neo4j"
 
   # ============================================
+  # MESSAGING LAYER
+  # ============================================
+
+  nats:
+    image: nats:latest
+    container_name: agentmesh-nats
+    ports:
+      - "4222:4222"    # Client connections
+      - "8222:8222"    # Monitoring dashboard
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
   # MESH PERSISTENCE LAYER
   # ============================================
   #

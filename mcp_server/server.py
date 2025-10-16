@@ -9,6 +9,7 @@ from mcp.types import Resource, TextContent, Tool
 
 from adapters.knowledge_base.neo4j.adapter import Neo4jAdapter
 from adapters.knowledge_base.postgres.adapter import PostgresAdapter
+from adapters.messaging.nats_client import NATSWrapper
 from adapters.persistence.sqlite.adapter import SQLitePersistenceAdapter
 from services.registry import (
     AgentService,
@@ -33,6 +34,7 @@ app = Server("agentmesh-mcp")
 # Global adapter instances
 postgres_adapter: PostgresAdapter | None = None
 neo4j_adapter: Neo4jAdapter | None = None
+nats_client: NATSWrapper | None = None
 
 # Global service instances
 persistence_adapter: SQLitePersistenceAdapter | None = None
@@ -44,7 +46,7 @@ health_service: HealthService | None = None
 
 async def initialize_adapters():
     """Initialize database adapters and services"""
-    global postgres_adapter, neo4j_adapter
+    global postgres_adapter, neo4j_adapter, nats_client
     global persistence_adapter, agent_service, kb_service, directory_service, health_service
 
     logger.info("Initializing persistence adapter...")
@@ -61,9 +63,20 @@ async def initialize_adapters():
     neo4j_adapter = Neo4jAdapter("adapters/knowledge_base/neo4j/config.yaml")
     await neo4j_adapter.connect()
 
+    # Initialize NATS client (optional - will fail silently if NATS not available)
+    logger.info("Initializing NATS client...")
+    nats_client = NATSWrapper()
+    try:
+        await nats_client.connect()
+        logger.info("NATS client connected successfully")
+    except Exception as e:
+        logger.warning(f"NATS client not available: {e}")
+        logger.warning("Registry services will work without real-time notifications")
+        nats_client = None
+
     logger.info("Initializing registry services...")
-    agent_service = AgentService(persistence_adapter)
-    kb_service = KBService(persistence_adapter)
+    agent_service = AgentService(persistence_adapter, nats_client)
+    kb_service = KBService(persistence_adapter, nats_client)
     directory_service = DirectoryService(persistence_adapter)
     health_service = HealthService(persistence_adapter)
 
@@ -77,6 +90,8 @@ async def cleanup_adapters():
     """Cleanup database connections and services"""
     if health_service:
         await health_service.stop_monitoring()
+    if nats_client:
+        await nats_client.disconnect()
     if postgres_adapter:
         await postgres_adapter.disconnect()
     if neo4j_adapter:

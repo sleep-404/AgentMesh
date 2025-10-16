@@ -25,11 +25,22 @@ AgentMesh project - A flexible multi-layer adapter system for knowledge bases an
 - **Health Monitoring**: Background health checks with status tracking (active/degraded/offline)
 - **MCP Tools**: 9 new tools for agent/KB management via Claude Desktop
 
+### Messaging Layer (NATS Integration) ✨ NEW
+- **Real-Time Notifications**: Agents receive instant notifications when new agents/KBs register
+- **Directory Subscriber**: Background service maintaining in-memory directory cache
+- **Agent Discovery**: Agents can query the mesh to discover other agents and their capabilities
+- **KB Discovery**: Agents can discover available knowledge bases and their operations
+- **Pub/Sub Architecture**: Simple NATS-based messaging for mesh topology changes
+- **Request-Response Pattern**: Directory queries using NATS request-response
+- **Capability-Based Search**: Find agents by specific capabilities (e.g., "query_kb", "crew_orchestration")
+- **Automatic Caching**: Directory subscriber maintains hot cache loaded from persistence
+
 ### Integration & Developer Experience
 - **MCP Server Integration**: Expose adapters via Model Context Protocol for Claude Desktop
-- **Docker Integration**: Ready-to-use Docker configurations for local development
+- **Docker Integration**: Ready-to-use Docker configurations for local development (now includes NATS)
 - **Comprehensive Testing**: 78 integration tests covering all layers (KB, persistence, services)
 - **Automatic Migrations**: Schema versioning and migration system built-in
+- **Sample Agent**: Example agent demonstrating mesh connectivity and discovery
 
 ## Prerequisites
 
@@ -174,14 +185,39 @@ uv sync --all-extras --all-groups
 │   │       ├── operations.py          # Neo4j operations
 │   │       ├── config.yaml            # Neo4j config
 │   │       └── docker-compose.yaml    # Neo4j Docker setup
-│   └── persistence/                   # Mesh persistence layer
-│       ├── base.py                    # Base persistence interface
-│       ├── schemas.py                 # Pydantic models (agent, KB, policy, audit)
-│       ├── exceptions.py              # Persistence exceptions
-│       └── sqlite/                    # SQLite adapter (default)
-│           ├── adapter.py             # SQLite implementation
-│           ├── migrations.py          # Migration system
-│           └── config.yaml            # SQLite config
+│   ├── persistence/                   # Mesh persistence layer
+│   │   ├── base.py                    # Base persistence interface
+│   │   ├── schemas.py                 # Pydantic models (agent, KB, policy, audit)
+│   │   ├── exceptions.py              # Persistence exceptions
+│   │   └── sqlite/                    # SQLite adapter (default)
+│   │       ├── adapter.py             # SQLite implementation
+│   │       ├── migrations.py          # Migration system
+│   │       └── config.yaml            # SQLite config
+│   └── messaging/                     # ✨ NEW: Messaging layer (NATS)
+│       ├── __init__.py
+│       └── nats_client.py             # NATS client wrapper
+├── services/                          # Registry services layer
+│   ├── registry/
+│   │   ├── agent_service.py           # Agent registration & management
+│   │   ├── kb_service.py              # KB registration & management
+│   │   ├── directory_service.py       # Agent/KB discovery
+│   │   ├── health_service.py          # Health monitoring
+│   │   └── schemas.py                 # Service request/response models
+│   └── directory/                     # ✨ NEW: Directory subscriber
+│       ├── __init__.py
+│       └── subscriber.py              # NATS subscriber for directory queries
+├── examples/                          # ✨ NEW: Example agents
+│   ├── __init__.py
+│   └── sample_agent.py                # Sample agent demonstrating mesh connectivity
+├── dummy_agents/                      # Working agent implementations
+│   ├── grpc_server.py                 # gRPC server (Langraph, Lyzr)
+│   ├── rest_server.py                 # REST API server (CrewAI, OpenAI)
+│   ├── agents/                        # Agent implementations
+│   │   ├── langraph_agent.py
+│   │   ├── lyzr_agent.py
+│   │   ├── crewai_agent.py
+│   │   └── openai_agent.py
+│   └── protos/                        # gRPC protocol definitions
 ├── mcp_server/
 │   ├── __init__.py                    # MCP server package
 │   └── server.py                      # MCP server implementation
@@ -464,16 +500,23 @@ await adapter.disconnect()
 ### Running Local Databases
 
 ```bash
-# Start knowledge base databases (PostgreSQL and Neo4j)
+# Start all services (PostgreSQL, Neo4j, and NATS)
 docker-compose up -d
 
-# Check database status
+# Or start specific services
+docker-compose up -d postgres neo4j  # Just databases
+docker-compose up -d nats            # Just NATS messaging
+
+# Check service status
 docker-compose ps
 
 # View logs
 docker-compose logs -f
 
-# Stop databases
+# View logs for specific service
+docker-compose logs -f nats
+
+# Stop services
 docker-compose down
 
 # Stop and remove all data
@@ -481,6 +524,186 @@ docker-compose down -v
 ```
 
 **Note**: The persistence layer (SQLite) doesn't require Docker - it's file-based and stored at `data/agentmesh.db`
+
+**Services in docker-compose:**
+- `postgres`: PostgreSQL database for knowledge base (port 5432)
+- `neo4j`: Neo4j graph database for knowledge base (ports 7474, 7687)
+- `nats`: NATS messaging server for agent communication (ports 4222, 8222)
+
+## NATS Messaging Integration
+
+AgentMesh includes a NATS-based messaging layer that enables real-time agent-to-agent communication and discovery.
+
+### Architecture
+
+```
+Agent/KB Registration (via MCP)
+       ↓
+Registry Service stores in persistence
+       ↓
+Publishes to NATS: mesh.directory.updates
+       ↓
+Directory Subscriber receives & caches
+       ↓
+All subscribed agents notified in real-time
+```
+
+### Starting the Messaging Layer
+
+```bash
+# 1. Start NATS server (included in docker-compose)
+docker-compose up -d nats
+
+# 2. Start the directory subscriber (handles directory queries and caching)
+python -m services.directory.subscriber
+
+# 3. Run the sample agent (demonstrates discovery and notifications)
+python -m examples.sample_agent
+```
+
+### NATS Subjects
+
+- **`mesh.directory.updates`**: Broadcasts all agent/KB registration events
+- **`mesh.directory.query`**: Request-response for directory listings
+
+### Message Formats
+
+**Agent Registration Notification:**
+```json
+{
+  "type": "agent_registered",
+  "timestamp": "2025-10-16T12:00:00Z",
+  "data": {
+    "identity": "analytics-agent-1",
+    "version": "1.0.0",
+    "capabilities": ["data_analysis", "query_kb"],
+    "operations": ["invoke", "query"],
+    "status": "active"
+  }
+}
+```
+
+**KB Registration Notification:**
+```json
+{
+  "type": "kb_registered",
+  "timestamp": "2025-10-16T12:00:00Z",
+  "data": {
+    "kb_id": "sales-kb-1",
+    "kb_type": "postgres",
+    "operations": ["sql_query", "insert"],
+    "status": "active"
+  }
+}
+```
+
+**Directory Query Request:**
+```json
+{
+  "request_id": "uuid",
+  "filter": null  // or "agents" or "kbs"
+}
+```
+
+**Directory Query Response:**
+```json
+{
+  "request_id": "uuid",
+  "agents": [
+    {
+      "identity": "analytics-agent-1",
+      "capabilities": ["data_analysis", "query_kb"],
+      "status": "active"
+    }
+  ],
+  "kbs": [
+    {
+      "kb_id": "sales-kb-1",
+      "kb_type": "postgres",
+      "operations": ["sql_query"]
+    }
+  ],
+  "timestamp": "2025-10-16T12:00:00Z"
+}
+```
+
+### Using the Sample Agent
+
+The sample agent demonstrates how to connect to the mesh and discover other agents:
+
+```python
+from adapters.messaging.nats_client import NATSWrapper
+
+# Initialize NATS client
+nats_client = NATSWrapper(url="nats://localhost:4222")
+await nats_client.connect()
+
+# Subscribe to directory updates
+async def handle_update(message):
+    if message["type"] == "agent_registered":
+        print(f"New agent: {message['data']['identity']}")
+    elif message["type"] == "kb_registered":
+        print(f"New KB: {message['data']['kb_id']}")
+
+await nats_client.subscribe("mesh.directory.updates", handle_update)
+
+# Query directory
+request = {"request_id": "abc123", "filter": None}
+response = await nats_client.request("mesh.directory.query", request)
+print(f"Found {len(response['agents'])} agents")
+print(f"Found {len(response['kbs'])} KBs")
+```
+
+### What Gets Notified
+
+**✅ Currently Implemented:**
+- New agent registrations
+- New KB registrations
+- Real-time directory updates
+
+**❌ Not Yet Implemented:**
+- Agent capability updates
+- Agent/KB deregistration
+- Health status changes
+
+### Service Discovery Example
+
+When you register an agent via MCP tools:
+
+```bash
+# In Claude Desktop (or via MCP)
+Register agent: analytics-agent-1
+  Capabilities: data_analysis, visualization, query_kb
+  Operations: invoke, query, subscribe
+```
+
+All running agents subscribed to the mesh will instantly receive:
+- Notification about the new agent
+- Updated directory when they query
+- Ability to discover by capability (e.g., "which agents can query_kb?")
+
+### Demo Agents
+
+The project includes 4 working agent implementations in `dummy_agents/`:
+
+**gRPC Agents (port 50051):**
+- `langraph-agent-1`: Graph workflow execution
+- `lyzr-agent-1`: Workflow automation
+
+**REST Agents (port 8000):**
+- `crewai-agent-1`: Multi-agent crew orchestration
+- `openai-agent-1`: Direct OpenAI API integration
+
+Start them with:
+```bash
+# Terminal 1: gRPC server
+python dummy_agents/grpc_server.py
+
+# Terminal 2: REST server
+python dummy_agents/rest_server.py
+```
+
+Then register them via MCP tools - the directory subscriber will broadcast their availability!
 
 ## MCP Server Integration
 
@@ -512,7 +735,7 @@ docker-compose up -d
 - **Datetime Serialization**: Proper JSON handling for all datetime fields
 - **Testing Support**: Use MCP Inspector to test tools and resources
 
-**Note**: MCP server currently exposes knowledge base adapters. Persistence layer integration coming soon.
+**Note**: The MCP server connects to NATS if available. For best results, start NATS before the MCP server to enable real-time notifications.
 
 ### Example MCP Usage in Claude
 

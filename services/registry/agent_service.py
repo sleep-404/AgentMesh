@@ -33,14 +33,20 @@ ALLOWED_OPERATIONS = ["publish", "query", "subscribe", "invoke"]
 class AgentService:
     """Service for managing agent registration and lifecycle"""
 
-    def __init__(self, persistence_adapter: BasePersistenceAdapter):
+    def __init__(
+        self,
+        persistence_adapter: BasePersistenceAdapter,
+        nats_client: object | None = None,
+    ):
         """
         Initialize agent service.
 
         Args:
             persistence_adapter: Persistence adapter for storing agent records
+            nats_client: Optional NATS client for publishing notifications
         """
         self.persistence = persistence_adapter
+        self.nats_client = nats_client
 
     async def register_agent(
         self, request: AgentRegistrationRequest
@@ -93,13 +99,19 @@ class AgentService:
                 f"Agent '{request.identity}' registered successfully with ID: {agent_id}"
             )
 
-            return AgentRegistrationResponse(
+            response = AgentRegistrationResponse(
                 agent_id=agent_id,
                 identity=request.identity,
                 version=request.version,
                 status=initial_status,
                 registered_at=datetime.now(UTC),
             )
+
+            # Publish notification to NATS if client is available
+            if self.nats_client and self.nats_client.is_connected:
+                await self._publish_agent_registered(request, initial_status)
+
+            return response
         except DuplicateRecordError as e:
             # This should be caught above, but handle it just in case
             raise DuplicateIdentityError(request.identity) from e
@@ -270,3 +282,32 @@ class AgentService:
 
         await self.persistence.deregister_agent(identity)
         logger.info(f"Agent '{identity}' deregistered successfully")
+
+    async def _publish_agent_registered(
+        self, request: AgentRegistrationRequest, status: str
+    ) -> None:
+        """
+        Publish agent registration notification to NATS.
+
+        Args:
+            request: Agent registration request
+            status: Health status
+        """
+        try:
+            notification = {
+                "type": "agent_registered",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "identity": request.identity,
+                    "version": request.version,
+                    "capabilities": request.capabilities,
+                    "operations": request.operations,
+                    "status": status,
+                },
+            }
+            await self.nats_client.publish("mesh.directory.updates", notification)
+            logger.debug(
+                f"Published agent registration notification for {request.identity}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to publish agent registration notification: {e}")
