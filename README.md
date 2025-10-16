@@ -129,88 +129,6 @@ docker-compose ps
 
 ---
 
-## 📊 Evaluation Criteria Mapping
-
-### ✅ Ease of Integration (25%)
-- **Registry-Based Discovery**: KBs register via simple MCP tools with validation
-- **Auto-Tool Generation**: MCP tools created automatically from adapter interfaces
-- **No Downtime Onboarding**: New KBs/agents added without mesh restart
-- **Real-Time Notifications**: Agents instantly notified of new capabilities via NATS
-- **Location**: `services/registry/`, `mcp_server/server.py`
-
-**Evidence**:
-- Register agent in <30 seconds via Claude Desktop
-- 17 auto-generated MCP tools (9 registry + 4 PostgreSQL + 4 Neo4j)
-- Background health monitoring with automatic status updates
-- NATS pub/sub for instant agent discovery
-
-### ✅ Data Control & Privacy (20%)
-- **Response Interception**: Mesh masks sensitive fields BEFORE forwarding to requesters
-- **Policy Engine**: OPA-based RBAC with deny-overrides precedence
-- **Field-Level Masking**: Granular control over sensitive data (email, phone, SSN)
-- **Audit Trails**: Every access logged with (who, what, when, fields_masked)
-- **Location**: `services/enforcement/enforcement_service.py`, `policies/agentmesh.rego`
-
-**Evidence**:
-- Policy evaluation in <10ms (OPA in-memory)
-- Response masking before delivery to requester
-- Immutable audit logs with extensible metadata (JSONB)
-- 80% test coverage on policy enforcement scenarios
-
-### ✅ Architecture & Code Quality (20%)
-- **Modular Design**: Router, Policy Engine, Adapters, MCP Server are independent
-- **Clear Boundaries**: Intelligence (KBs/Agents) vs Infrastructure (Mesh)
-- **Extensible**: Lightweight schemas with clear expansion paths
-- **Message Broker Pattern**: Proper separation of concerns (authorization in mesh, execution in adapters)
-- **Location**: See `ARCHITECTURE.md` for deep dive
-
-**Evidence**:
-- 78 integration tests (100% passing)
-- Pre-commit hooks (black, ruff, mypy)
-- Clean adapter interface for any KB type
-- NATS request-reply for governed KB access
-
-### ✅ Knowledge Modeling (15%)
-- **KB-Agnostic**: Supports SQL, Cypher, Vector Search, REST via adapters
-- **Schema Validation**: KBs register schemas; mesh validates responses
-- **Metadata-Only**: Mesh stores registry + audit logs, NOT organizational data
-- **Operation Discovery**: Dynamic operation registry for extensibility
-- **Location**: `adapters/knowledge_base/`, `adapters/persistence/`
-
-**Evidence**:
-- PostgreSQL adapter: 4 operations (sql_query, insert, update, delete)
-- Neo4j adapter: 4 operations (cypher_query, create_node, create_relationship, find_node)
-- Registry stores KB schemas, not KB data
-- Extensible adapter pattern for any database type
-
-### ✅ Scalability & Performance (15%)
-- **Lightweight Routing**: No query translation overhead
-- **Horizontal Scaling**: Stateless router design with NATS
-- **Performance Target**: P95 routing overhead <100ms
-- **Connection Pooling**: Efficient database connections
-- **Location**: See `ARCHITECTURE.md` Section 5
-
-**Evidence**:
-- NATS messaging for distributed communication
-- SQLite → PostgreSQL migration path for scale
-- In-memory policy cache (OPA)
-- Async/await throughout for concurrency
-
-### ✅ Innovation & Applicability (5%)
-- **Bring-Your-Own-Reasoning**: Users connect any LLM via MCP
-- **Zero-Copy Governance**: Mesh doesn't duplicate KB data
-- **Universal Adapter Pattern**: One interface, any KB type
-- **Message Broker Architecture**: Clean separation of governance and execution
-- **Location**: See `THINKING.md` for rationale
-
-**Evidence**:
-- MCP protocol for universal LLM integration
-- Response interception for zero-copy masking
-- NATS pub/sub for real-time agent discovery
-- 16/20 core test scenarios passing (80% coverage)
-
----
-
 ## 🎬 Demo Scenarios
 
 ### Scenario 1: Cross-Team Privacy-Preserving Query
@@ -409,14 +327,6 @@ docker-compose up -d
 # Deploy multiple mesh instances with NATS clustering
 # Add Redis for distributed policy cache
 ```
-
----
-
-## 👥 Contact
-
-- **Project**: AgentMesh
-- **Hackathon**: MCP Server Innovation Challenge
-- **Repository**: https://github.com/yourusername/AgentMesh
 
 ---
 
