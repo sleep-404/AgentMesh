@@ -503,9 +503,13 @@ docker-compose up -d
 
 ### MCP Features
 
-- **8 Auto-generated Tools**: 4 PostgreSQL + 4 Neo4j operations
+- **17 Tools Total**:
+  - 9 Registry management tools (agent/KB registration, listing, health checks)
+  - 4 PostgreSQL operations (sql_query, insert, update, delete)
+  - 4 Neo4j operations (cypher_query, create_node, create_relationship, find_node)
 - **4 Resources**: Database status, operations metadata, schema discovery
-- **Dynamic Discovery**: Tools are automatically generated from adapter operations
+- **Dynamic Discovery**: KB tools are automatically generated from adapter operations
+- **Datetime Serialization**: Proper JSON handling for all datetime fields
 - **Testing Support**: Use MCP Inspector to test tools and resources
 
 **Note**: MCP server currently exposes knowledge base adapters. Persistence layer integration coming soon.
