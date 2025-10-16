@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from adapters.knowledge_base.neo4j.adapter import Neo4jAdapter
 from adapters.knowledge_base.postgres.adapter import PostgresAdapter
+from adapters.messaging.nats_client import NATSWrapper
 from adapters.persistence.base import BasePersistenceAdapter
 from adapters.persistence.exceptions import DuplicateRecordError
 from adapters.persistence.schemas import HealthStatus, KBRegistration
@@ -35,7 +36,7 @@ class KBService:
     def __init__(
         self,
         persistence_adapter: BasePersistenceAdapter,
-        nats_client: object | None = None,
+        nats_client: NATSWrapper | None = None,
     ):
         """
         Initialize KB service.
@@ -45,7 +46,7 @@ class KBService:
             nats_client: Optional NATS client for publishing notifications
         """
         self.persistence = persistence_adapter
-        self.nats_client = nats_client
+        self.nats_client: NATSWrapper | None = nats_client
 
     async def register_kb(
         self, request: KBRegistrationRequest
@@ -348,6 +349,9 @@ class KBService:
             request: KB registration request
             status: Health status
         """
+        if self.nats_client is None:
+            return
+
         try:
             notification = {
                 "type": "kb_registered",

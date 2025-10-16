@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 import aiohttp
 
+from adapters.messaging.nats_client import NATSWrapper
 from adapters.persistence.base import BasePersistenceAdapter
 from adapters.persistence.exceptions import DuplicateRecordError
 from adapters.persistence.schemas import AgentRegistration, HealthStatus
@@ -36,7 +37,7 @@ class AgentService:
     def __init__(
         self,
         persistence_adapter: BasePersistenceAdapter,
-        nats_client: object | None = None,
+        nats_client: NATSWrapper | None = None,
     ):
         """
         Initialize agent service.
@@ -46,7 +47,7 @@ class AgentService:
             nats_client: Optional NATS client for publishing notifications
         """
         self.persistence = persistence_adapter
-        self.nats_client = nats_client
+        self.nats_client: NATSWrapper | None = nats_client
 
     async def register_agent(
         self, request: AgentRegistrationRequest
@@ -293,6 +294,9 @@ class AgentService:
             request: Agent registration request
             status: Health status
         """
+        if self.nats_client is None:
+            return
+
         try:
             notification = {
                 "type": "agent_registered",

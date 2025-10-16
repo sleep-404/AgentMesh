@@ -113,6 +113,23 @@ services:
   #     timeout: 5s
   #     retries: 5
 
+  # ============================================
+  # POLICY ENGINE (OPA)
+  # ============================================
+
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: agentmesh-opa
+    ports:
+      - "8181:8181"    # OPA API
+    command:
+      - "run"
+      - "--server"
+      - "--log-level=info"
+      - "/policies"
+    volumes:
+      - ./policies:/policies:ro
+
 volumes:
   postgres_kb_data:
   neo4j_data:

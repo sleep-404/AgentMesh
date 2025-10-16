@@ -11,6 +11,8 @@ from adapters.knowledge_base.neo4j.adapter import Neo4jAdapter
 from adapters.knowledge_base.postgres.adapter import PostgresAdapter
 from adapters.messaging.nats_client import NATSWrapper
 from adapters.persistence.sqlite.adapter import SQLitePersistenceAdapter
+from adapters.policy.opa_client import OPAClient
+from services.enforcement import EnforcementService
 from services.registry import (
     AgentService,
     DirectoryService,
@@ -24,6 +26,11 @@ from services.registry.schemas import (
     KBListRequest,
     KBRegistrationRequest,
 )
+from services.routing import (
+    AgentInvokeRequest,
+    KBQueryRequest,
+    RequestRouter,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +42,7 @@ app = Server("agentmesh-mcp")
 postgres_adapter: PostgresAdapter | None = None
 neo4j_adapter: Neo4jAdapter | None = None
 nats_client: NATSWrapper | None = None
+opa_client: OPAClient | None = None
 
 # Global service instances
 persistence_adapter: SQLitePersistenceAdapter | None = None
@@ -42,12 +50,15 @@ agent_service: AgentService | None = None
 kb_service: KBService | None = None
 directory_service: DirectoryService | None = None
 health_service: HealthService | None = None
+enforcement_service: EnforcementService | None = None
+request_router: RequestRouter | None = None
 
 
 async def initialize_adapters():
     """Initialize database adapters and services"""
-    global postgres_adapter, neo4j_adapter, nats_client
+    global postgres_adapter, neo4j_adapter, nats_client, opa_client
     global persistence_adapter, agent_service, kb_service, directory_service, health_service
+    global enforcement_service, request_router
 
     logger.info("Initializing persistence adapter...")
     persistence_adapter = SQLitePersistenceAdapter(
@@ -74,11 +85,56 @@ async def initialize_adapters():
         logger.warning("Registry services will work without real-time notifications")
         nats_client = None
 
+    # Initialize OPA client (optional - will fail silently if OPA not available)
+    logger.info("Initializing OPA client...")
+    opa_client = OPAClient()
+    try:
+        is_healthy = await opa_client.health_check()
+        if is_healthy:
+            logger.info("OPA client connected successfully")
+        else:
+            logger.warning("OPA health check failed")
+            opa_client = None
+    except Exception as e:
+        logger.warning(f"OPA client not available: {e}")
+        logger.warning("Enforcement service will use fallback policy evaluation")
+        opa_client = None
+
     logger.info("Initializing registry services...")
     agent_service = AgentService(persistence_adapter, nats_client)
     kb_service = KBService(persistence_adapter, nats_client)
     directory_service = DirectoryService(persistence_adapter)
     health_service = HealthService(persistence_adapter)
+
+    logger.info("Initializing enforcement and routing services...")
+    # KB adapters map for enforcement service
+    kb_adapters = {
+        "postgres": postgres_adapter,
+        "neo4j": neo4j_adapter,
+    }
+
+    # Initialize enforcement service (works with or without OPA)
+    if opa_client:
+        enforcement_service = EnforcementService(
+            opa_client=opa_client,
+            persistence=persistence_adapter,
+            kb_adapters=kb_adapters,
+        )
+        logger.info("Enforcement service initialized with OPA")
+    else:
+        logger.warning("Enforcement service not available without OPA")
+
+    # Initialize request router (requires NATS and enforcement)
+    if nats_client and enforcement_service:
+        request_router = RequestRouter(
+            enforcement=enforcement_service,
+            persistence=persistence_adapter,
+            nats_client=nats_client,
+        )
+        await request_router.start()
+        logger.info("Request router started")
+    else:
+        logger.warning("Request router not available (requires NATS and OPA)")
 
     logger.info("Starting health monitoring...")
     await health_service.start_monitoring(interval_seconds=30)
@@ -88,8 +144,12 @@ async def initialize_adapters():
 
 async def cleanup_adapters():
     """Cleanup database connections and services"""
+    if request_router:
+        await request_router.stop()
     if health_service:
         await health_service.stop_monitoring()
+    if opa_client:
+        await opa_client.close()
     if nats_client:
         await nats_client.disconnect()
     if postgres_adapter:
@@ -314,6 +374,79 @@ async def list_tools() -> list[Tool]:
         ]
     )
 
+    # Routing tools (governance layer)
+    if request_router:
+        tools.extend(
+            [
+                Tool(
+                    name="query_kb_governed",
+                    description="Query a KB through the governance layer (enforces policies, applies masking, logs audit)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "requester_id": {
+                                "type": "string",
+                                "description": "Agent/user requesting access",
+                            },
+                            "kb_id": {
+                                "type": "string",
+                                "description": "Target KB identifier",
+                            },
+                            "operation": {
+                                "type": "string",
+                                "description": "Operation to perform (e.g., 'sql_query', 'cypher_query')",
+                            },
+                            "params": {
+                                "type": "object",
+                                "description": "Operation parameters (e.g., {'query': 'SELECT ...'})",
+                            },
+                        },
+                        "required": ["requester_id", "kb_id", "operation"],
+                    },
+                ),
+                Tool(
+                    name="invoke_agent_governed",
+                    description="Invoke an agent through the governance layer (enforces policies, tracks invocation, logs audit)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "source_agent_id": {
+                                "type": "string",
+                                "description": "Agent requesting invocation",
+                            },
+                            "target_agent_id": {
+                                "type": "string",
+                                "description": "Target agent to invoke",
+                            },
+                            "operation": {
+                                "type": "string",
+                                "description": "Operation to perform on target",
+                            },
+                            "payload": {
+                                "type": "object",
+                                "description": "Operation payload",
+                            },
+                        },
+                        "required": ["source_agent_id", "target_agent_id", "operation"],
+                    },
+                ),
+                Tool(
+                    name="get_invocation_status",
+                    description="Get status of an agent invocation by tracking ID",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "tracking_id": {
+                                "type": "string",
+                                "description": "Tracking ID of the invocation",
+                            },
+                        },
+                        "required": ["tracking_id"],
+                    },
+                ),
+            ]
+        )
+
     # PostgreSQL tools
     if postgres_adapter:
         pg_ops = postgres_adapter.get_operations()
@@ -474,6 +607,87 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     ),
                 )
             ]
+
+        # Handle routing tools (governance layer)
+        elif name == "query_kb_governed":
+            if not request_router:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "error": "Request router not available (requires NATS and OPA)"
+                            }
+                        ),
+                    )
+                ]
+
+            kb_request = KBQueryRequest(
+                requester_id=str(arguments.get("requester_id", "")),
+                kb_id=str(arguments.get("kb_id", "")),
+                operation=str(arguments.get("operation", "")),
+                params=arguments.get("params", {}),
+            )
+            kb_response = await request_router.route_kb_query(kb_request)
+            return [TextContent(type="text", text=json.dumps(kb_response.model_dump()))]
+
+        elif name == "invoke_agent_governed":
+            if not request_router:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "error": "Request router not available (requires NATS and OPA)"
+                            }
+                        ),
+                    )
+                ]
+
+            agent_request = AgentInvokeRequest(
+                source_agent_id=str(arguments.get("source_agent_id", "")),
+                target_agent_id=str(arguments.get("target_agent_id", "")),
+                operation=str(arguments.get("operation", "")),
+                payload=arguments.get("payload", {}),
+            )
+            agent_response = await request_router.route_agent_invoke(agent_request)
+            return [
+                TextContent(type="text", text=json.dumps(agent_response.model_dump()))
+            ]
+
+        elif name == "get_invocation_status":
+            if not request_router:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "error": "Request router not available (requires NATS and OPA)"
+                            }
+                        ),
+                    )
+                ]
+
+            invocation_tracking_id = str(arguments.get("tracking_id", ""))
+            invocation_response = await request_router.get_invocation_status(
+                invocation_tracking_id
+            )
+            if invocation_response:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(invocation_response.model_dump()),
+                    )
+                ]
+            else:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {"error": f"Invocation {invocation_tracking_id} not found"}
+                        ),
+                    )
+                ]
 
         # Handle KB adapter tools
         else:

@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 import nats
@@ -63,13 +63,16 @@ class NATSWrapper:
             logger.error(f"Failed to publish to {subject}: {e}")
 
     async def subscribe(
-        self, subject: str, callback: Callable[[dict[str, Any]], None]
+        self,
+        subject: str,
+        callback: Callable[[dict[str, Any]], None]
+        | Callable[[dict[str, Any]], Coroutine[Any, Any, None]],
     ) -> None:
         """Subscribe to a subject with a callback function.
 
         Args:
             subject: NATS subject to subscribe to
-            callback: Callback function to handle received messages
+            callback: Callback function (sync or async) to handle received messages
         """
         if not self.nc:
             logger.error("Not connected to NATS")
@@ -116,7 +119,7 @@ class NATSWrapper:
             timeout_val = timeout if timeout is not None else self.timeout
 
             response = await self.nc.request(subject, payload, timeout=timeout_val)
-            response_data = json.loads(response.data.decode())
+            response_data: dict[str, Any] = json.loads(response.data.decode())
             logger.debug(f"Request to {subject} got response: {response_data}")
             return response_data
         except asyncio.TimeoutError:
