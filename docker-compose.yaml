@@ -1,7 +1,11 @@
 services:
+  # ============================================
+  # KNOWLEDGE BASE ADAPTERS
+  # ============================================
+
   postgres:
     image: postgres:16-alpine
-    container_name: agentmesh-postgres
+    container_name: agentmesh-postgres-kb
     environment:
       POSTGRES_DB: agentmesh
       POSTGRES_USER: admin
@@ -9,7 +13,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Persistent data storage
+      - postgres_kb_data:/var/lib/postgresql/data  # Persistent data storage
       - ./db/knowledge_base/postgres/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Initial data script (runs only once)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d agentmesh"]
@@ -50,7 +54,51 @@ services:
     restart: "no"
     network_mode: "service:neo4j"
 
+  # ============================================
+  # MESH PERSISTENCE LAYER
+  # ============================================
+  #
+  # SQLite (Default):
+  # -----------------
+  # The default persistence adapter uses SQLite (file-based).
+  # No Docker container is needed - the database is stored at: data/agentmesh.db
+  # Configuration: adapters/persistence/sqlite/config.yaml
+  # Init scripts: db/persistence/init-sqlite.sql
+  #
+  # SQLite is suitable for:
+  # - Development and testing
+  # - Single-instance deployments
+  # - Small to medium scale (< 1M audit events)
+  #
+  # PostgreSQL (Future - for production):
+  # -------------------------------------
+  # Uncomment the section below to use PostgreSQL for persistence.
+  # Recommended for production deployments with:
+  # - High concurrency
+  # - Large audit logs (> 1M events)
+  # - Multi-instance mesh deployments
+  # - TimescaleDB support for time-series audit logs
+  #
+  # postgres-persistence:
+  #   image: postgres:16-alpine
+  #   container_name: agentmesh-postgres-persistence
+  #   environment:
+  #     POSTGRES_DB: agentmesh_persistence
+  #     POSTGRES_USER: admin
+  #     POSTGRES_PASSWORD: admin123
+  #   ports:
+  #     - "5433:5432"  # Different port to avoid conflict with KB postgres
+  #   volumes:
+  #     - postgres_persistence_data:/var/lib/postgresql/data
+  #     - ./db/persistence/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U admin -d agentmesh_persistence"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
 volumes:
-  postgres_data:
+  postgres_kb_data:
   neo4j_data:
   neo4j_logs:
+  # postgres_persistence_data:  # Uncomment if using PostgreSQL for persistence
