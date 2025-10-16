@@ -3,7 +3,7 @@
 import time
 from typing import Any
 
-from neo4j import AsyncDriver, AsyncGraphDatabase
+from neo4j import AsyncDriver, AsyncGraphDatabase, basic_auth
 
 from ..base import BaseKBAdapter
 from ..schemas import HealthResponse, HealthStatus, OperationMetadata
@@ -35,7 +35,7 @@ class Neo4jAdapter(BaseKBAdapter):
         """Establish connection to Neo4j."""
         uri = f"bolt://{self.config['host']}:{self.config['port']}"
         self.driver = AsyncGraphDatabase.driver(
-            uri, auth=(self.config["user"], self.config["password"])
+            uri, auth=basic_auth(self.config["user"], self.config["password"])
         )
 
     async def disconnect(self):
