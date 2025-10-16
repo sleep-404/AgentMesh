@@ -1,16 +1,28 @@
 # AgentMesh
 
-AgentMesh project - A flexible knowledge base adapter system for integrating multiple database backends.
+AgentMesh project - A flexible multi-layer adapter system for knowledge bases and mesh persistence.
 
 ## Features
 
+### Knowledge Base Layer
 - **Extensible Adapter System**: Base adapter interface for building knowledge base integrations
 - **PostgreSQL Adapter**: Full CRUD operations with connection pooling
 - **Neo4j Adapter**: Graph database operations (nodes, relationships, Cypher queries)
 - **Operation Registry**: Dynamic operation discovery and execution
+
+### Persistence Layer (Mesh State)
+- **Agent Registry**: Register and manage agent capabilities, health status, and metadata
+- **KB Registry**: Track knowledge base endpoints, operations, and health
+- **Policy Store**: Fine-grained access control with wildcard pattern matching
+- **Audit Logs**: Lightweight to heavyweight event logging with time-series queries
+- **SQLite Adapter**: Production-ready persistence with automatic migrations
+- **PostgreSQL-Ready**: Future-proof design for TimescaleDB and production deployments
+
+### Integration & Developer Experience
 - **MCP Server Integration**: Expose adapters via Model Context Protocol for Claude Desktop
 - **Docker Integration**: Ready-to-use Docker configurations for local development
-- **Comprehensive Testing**: 23 integration tests with real database instances
+- **Comprehensive Testing**: 46 integration tests (23 KB + 23 persistence) with real database instances
+- **Automatic Migrations**: Schema versioning and migration system built-in
 
 ## Prerequisites
 
@@ -67,13 +79,21 @@ uv run mypy .
 
 ### Running Tests
 
-The test suite includes integration tests that spin up real PostgreSQL and Neo4j databases using Docker.
+The test suite includes 46 integration tests across two layers:
+- **Knowledge Base Tests (23 tests)**: PostgreSQL and Neo4j with Docker
+- **Persistence Tests (23 tests)**: SQLite with in-memory databases
 
-**Important**: Make sure Docker is running before executing tests.
+**Important**: Make sure Docker is running before executing knowledge base tests.
 
 ```bash
-# Run all tests (requires Docker)
+# Run all tests (requires Docker for KB tests)
 uv run pytest
+
+# Run knowledge base tests only
+uv run pytest tests/adapters/knowledge_base/
+
+# Run persistence tests only (no Docker needed)
+uv run pytest tests/adapters/persistence/
 
 # Run specific test file
 uv run pytest tests/adapters/knowledge_base/test_postgres.py
@@ -89,12 +109,20 @@ uv run pytest tests/adapters/knowledge_base/test_postgres.py::test_health
 ```
 
 **What happens during test execution:**
+
+*Knowledge Base Tests:*
 1. Docker containers for PostgreSQL and Neo4j are automatically started
 2. Tests wait for databases to be healthy
 3. All tests run against real database instances
 4. Containers are automatically cleaned up after tests complete
 
-**Note**: The first test run may take a few minutes while Docker images are downloaded.
+*Persistence Tests:*
+1. In-memory SQLite databases are created for each test
+2. Migrations run automatically
+3. Tests execute against isolated databases
+4. Databases are cleaned up after each test
+
+**Note**: The first KB test run may take a few minutes while Docker images are downloaded.
 
 ### Adding Dependencies
 
@@ -114,43 +142,57 @@ uv sync --all-extras --all-groups
 ```
 .
 ├── adapters/
-│   └── knowledge_base/
-│       ├── base.py                    # Base adapter interface
-│       ├── registry.py                # Operation registry
-│       ├── schemas.py                 # Common Pydantic schemas
-│       ├── exceptions.py              # Structured exceptions
-│       ├── config.py                  # YAML config loader
-│       ├── postgres/
-│       │   ├── adapter.py             # PostgreSQL adapter
-│       │   ├── operations.py          # PostgreSQL operations
-│       │   ├── config.yaml            # PostgreSQL config
-│       │   └── docker-compose.yaml    # PostgreSQL Docker setup
-│       └── neo4j/
-│           ├── adapter.py             # Neo4j adapter
-│           ├── operations.py          # Neo4j operations
-│           ├── config.yaml            # Neo4j config
-│           └── docker-compose.yaml    # Neo4j Docker setup
+│   ├── knowledge_base/                # Knowledge base layer adapters
+│   │   ├── base.py                    # Base adapter interface
+│   │   ├── registry.py                # Operation registry
+│   │   ├── schemas.py                 # Common Pydantic schemas
+│   │   ├── exceptions.py              # Structured exceptions
+│   │   ├── config.py                  # YAML config loader
+│   │   ├── postgres/
+│   │   │   ├── adapter.py             # PostgreSQL adapter
+│   │   │   ├── operations.py          # PostgreSQL operations
+│   │   │   ├── config.yaml            # PostgreSQL config
+│   │   │   └── docker-compose.yaml    # PostgreSQL Docker setup
+│   │   └── neo4j/
+│   │       ├── adapter.py             # Neo4j adapter
+│   │       ├── operations.py          # Neo4j operations
+│   │       ├── config.yaml            # Neo4j config
+│   │       └── docker-compose.yaml    # Neo4j Docker setup
+│   └── persistence/                   # Mesh persistence layer
+│       ├── base.py                    # Base persistence interface
+│       ├── schemas.py                 # Pydantic models (agent, KB, policy, audit)
+│       ├── exceptions.py              # Persistence exceptions
+│       └── sqlite/                    # SQLite adapter (default)
+│           ├── adapter.py             # SQLite implementation
+│           ├── migrations.py          # Migration system
+│           └── config.yaml            # SQLite config
 ├── mcp_server/
 │   ├── __init__.py                    # MCP server package
 │   └── server.py                      # MCP server implementation
 ├── tests/
 │   └── adapters/
-│       └── knowledge_base/
-│           ├── conftest.py            # Test fixtures and setup
-│           ├── test_postgres.py       # PostgreSQL tests (10 tests)
-│           ├── test_neo4j.py          # Neo4j tests (13 tests)
-│           ├── docker-compose.test.yaml  # Test database setup
-│           └── fixtures/              # Test data and configs
+│       ├── knowledge_base/
+│       │   ├── conftest.py            # Test fixtures and setup
+│       │   ├── test_postgres.py       # PostgreSQL tests (10 tests)
+│       │   ├── test_neo4j.py          # Neo4j tests (13 tests)
+│       │   ├── docker-compose.test.yaml  # Test database setup
+│       │   └── fixtures/              # Test data and configs
+│       └── persistence/
+│           ├── conftest.py            # Persistence test fixtures
+│           └── test_sqlite.py         # SQLite tests (23 tests)
 ├── architectures/                     # Architecture diagrams
 ├── knowledge/                         # Documentation and knowledge base
-├── db/                                # Database initialization scripts and volumes
+├── db/                                # Database initialization scripts
 │   ├── knowledge_base/                # Knowledge base layer databases
 │   │   ├── neo4j/                     # Neo4j init scripts
 │   │   │   ├── init-neo4j.cypher      # Neo4j sample data
 │   │   │   └── init-neo4j.sh          # Neo4j initialization script
 │   │   └── postgres/                  # PostgreSQL init scripts
 │   │       └── init-postgres.sql      # PostgreSQL sample data
-│   └── persistence/                   # Persistence layer (reserved for future use)
+│   └── persistence/                   # Mesh persistence layer
+│       └── init-sqlite.sql            # SQLite schema (reference)
+├── data/                              # Runtime data (created automatically)
+│   └── agentmesh.db                   # SQLite database (auto-created)
 ├── docker-compose.yaml                # Unified database setup
 ├── claude_desktop_config.json         # Reference Claude Desktop config
 ├── MCP_SETUP.md                       # MCP server setup guide
@@ -162,7 +204,9 @@ uv sync --all-extras --all-groups
 
 ## Usage Examples
 
-### PostgreSQL Adapter
+### Knowledge Base Adapters
+
+#### PostgreSQL Adapter
 
 ```python
 from adapters.knowledge_base.postgres.adapter import PostgresAdapter
@@ -192,7 +236,7 @@ result = await adapter.execute(
 await adapter.disconnect()
 ```
 
-### Neo4j Adapter
+#### Neo4j Adapter
 
 ```python
 from adapters.knowledge_base.neo4j.adapter import Neo4jAdapter
@@ -224,14 +268,120 @@ result = await adapter.execute(
 await adapter.disconnect()
 ```
 
+### Persistence Layer (Mesh State)
+
+The persistence layer manages mesh metadata: agent registry, KB registry, policies, and audit logs.
+
+```python
+from adapters.persistence.sqlite import SQLitePersistenceAdapter
+from adapters.persistence.schemas import (
+    AgentRegistration, KBRegistration,
+    PolicyDefinition, PolicyRule,
+    AuditEvent, AuditEventType, AuditOutcome
+)
+
+# Initialize adapter (automatically creates and migrates database)
+adapter = SQLitePersistenceAdapter("adapters/persistence/sqlite/config.yaml")
+await adapter.connect()
+
+# Register an agent
+agent_id = await adapter.register_agent(
+    AgentRegistration(
+        identity="sales-agent-1",
+        version="1.0.0",
+        capabilities=["query_kb", "generate_report"],
+        operations=["publish", "query", "subscribe"],
+        schemas={"input": {"type": "object"}, "output": {"type": "array"}},
+        health_endpoint="http://localhost:8001/health",
+        metadata={"team": "sales", "region": "us-west"}
+    )
+)
+
+# Register a knowledge base
+kb_id = await adapter.register_kb(
+    KBRegistration(
+        kb_id="sales-kb-1",
+        kb_type="postgres",
+        endpoint="postgres://localhost:5432/sales",
+        operations=["sql_query", "insert", "update"],
+        kb_schema={"tables": ["customers", "deals", "activities"]},
+        metadata={"owner": "sales-team"}
+    )
+)
+
+# Create an access policy
+policy_id = await adapter.create_policy(
+    PolicyDefinition(
+        policy_name="sales-team-read-only",
+        rules=[
+            PolicyRule(
+                principal="sales-agent-*",      # Wildcard matching
+                resource="sales-kb-1",
+                action="read",
+                effect="allow",
+                masking_rules=["customer_email", "phone"]  # PII masking
+            )
+        ],
+        precedence=100,
+        active=True,
+        metadata={"created_by": "admin"}
+    )
+)
+
+# Evaluate policy
+decision = await adapter.evaluate_policy(
+    principal="sales-agent-1",
+    resource="sales-kb-1",
+    action="read"
+)
+# Returns: {"effect": "allow", "masking_rules": ["customer_email", "phone"], ...}
+
+# Log an audit event
+event_id = await adapter.log_event(
+    AuditEvent(
+        event_type=AuditEventType.QUERY,
+        source_id="sales-agent-1",
+        target_id="sales-kb-1",
+        outcome=AuditOutcome.SUCCESS,
+        request_metadata={"query_type": "sql", "table": "customers"},
+        masked_fields=["customer_email", "phone"]
+    )
+)
+
+# Query audit logs
+from adapters.persistence.schemas import AuditQuery
+logs = await adapter.query_audit_logs(
+    AuditQuery(
+        source_id="sales-agent-1",
+        event_type=AuditEventType.QUERY,
+        limit=100
+    )
+)
+
+# Get audit statistics
+stats = await adapter.get_audit_stats(source_id="sales-agent-1")
+# Returns: {"outcome_counts": {...}, "event_type_counts": {...}}
+
+await adapter.disconnect()
+```
+
+**Database Location**: By default, SQLite database is stored at `data/agentmesh.db`
+
+**Automatic Migrations**: Schema is automatically created and versioned on first connection
+
+**Future PostgreSQL Support**: For production deployments, uncomment the PostgreSQL persistence section in `docker-compose.yaml`
+
 ### Running Local Databases
 
 ```bash
-# Start both PostgreSQL and Neo4j (unified setup)
+# Start knowledge base databases (PostgreSQL and Neo4j)
 docker-compose up -d
 
 # Check database status
 docker-compose ps
+
+# View logs
+docker-compose logs -f
 
 # Stop databases
 docker-compose down
@@ -239,6 +389,8 @@ docker-compose down
 # Stop and remove all data
 docker-compose down -v
 ```
+
+**Note**: The persistence layer (SQLite) doesn't require Docker - it's file-based and stored at `data/agentmesh.db`
 
 ## MCP Server Integration
 
@@ -265,6 +417,8 @@ docker-compose up -d
 - **4 Resources**: Database status, operations metadata, schema discovery
 - **Dynamic Discovery**: Tools are automatically generated from adapter operations
 - **Testing Support**: Use MCP Inspector to test tools and resources
+
+**Note**: MCP server currently exposes knowledge base adapters. Persistence layer integration coming soon.
 
 ### Example MCP Usage in Claude
 
