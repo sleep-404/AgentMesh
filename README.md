@@ -14,6 +14,85 @@
 
 ## 🏗️ Architecture Overview
 
+### Agent-to-Knowledge Base Interaction
+
+![Agent to Knowledge Base Flow](assets/agent-kb.jpeg)
+
+**Detailed Query Flow:**
+
+**Step 1: Query Initiation**
+- **Agent-1 → KB-1-Subject (Topic)**: Agent-1 publishes a query to the KB-1-Subject topic
+- **Payload**: `{query, agent_id, jwt_token}`
+
+**Step 2: Message Routing**
+- **KB-1-Subject → KB-1-Queue Consumer**: Topic routes message to optional queue consumer
+- **Payload**: `{query, agent_id, jwt_token}`
+- Provides buffering and load balancing
+
+**Step 3: Subscriber Receives Request**
+- **KB-1-Queue Consumer → KB-1-Subscriber**: Consumer forwards message to subscriber (routing layer)
+- **Payload**: `{query, agent_id, jwt_token}`
+
+**Step 4: Authorization Check**
+- **KB-1-Subscriber → Policy Check (RBAC)**: Subscriber sends JWT for validation
+- **Payload**: `{jwt_token}`
+- RBAC validates whether Agent-1 can access KB-1
+
+**Step 5: Authorization Response**
+- **Policy Check → KB-1-Subscriber**: Returns authorization decision
+- **Response**: `Allow` or `Deny`
+- If denied, flow stops and error returned to Agent-1
+
+**Step 6: Query Forwarding**
+- **KB-1-Subscriber → KB-1-Adapter**: If approved, forwards query to adapter
+- **Payload**: `{query}` only (authentication already validated)
+- Adapter translates to KB-1's native protocol
+
+**Step 7: Database Query Execution**
+- **KB-1-Adapter → KB-1 (Graph DB)**: Adapter executes query against knowledge base
+- **Payload**: Query in native format (e.g., Cypher, SQL)
+- KB-1 processes and retrieves data
+
+**Step 8: Unmasked Result Return**
+- **KB-1 → KB-1-Adapter**: Knowledge base returns complete, unmasked result
+- **Payload**: `{unmasked_result}` (raw data without filtering)
+
+**Step 9: Result Forwarding**
+- **KB-1-Adapter → KB-1-Subscriber**: Adapter returns unmasked result to subscriber
+- **Payload**: `{unmasked_result}`
+- No transformation applied yet
+
+**Step 10: Policy-Based Masking**
+- **KB-1-Subscriber → Policy Mask (ABAC)**: Subscriber sends result for field-level masking
+- **Payload**: `{unmasked_result}`
+- ABAC applies masking based on Agent-1's role, attributes, and purpose-of-use policies
+
+**Step 11: Masked Result Preparation**
+- **Policy Mask → KB-1-Subscriber**: Returns filtered result
+- **Payload**: `{masked_result}`
+- Sensitive fields redacted, tokenized, or aggregated
+
+**Step 12: Result Publishing**
+- **KB-1-Subscriber → Agent-1-Subject**: Subscriber publishes masked result to Agent-1-Subject topic
+- **Payload**: `{masked_result}`
+- Enables asynchronous response delivery
+
+**Step 13: Agent Receives Result**
+- **Agent-1-Subject → Agent-1**: Agent-1 receives the governed, policy-compliant data
+- **Payload**: `{masked_result}`
+
+**Key Design Principles:**
+- **Zero-Trust Security**: Authorization before execution, masking after retrieval
+- **KB-Agnostic**: Query passes through unchanged until adapter
+- **Separation of Concerns**: RBAC (access) → ABAC (field masking) → Adapter (protocol)
+- **Asynchronous Messaging**: Topics enable pub/sub patterns, no blocking
+- **Audit Trail**: Logged at request, authorization, masking, and delivery stages
+
+**Error Handling:**
+- Step 5 denied → Return error, log as "denied", no query execution
+- KB-1 unavailable → Adapter timeout/retry, error logged and returned
+- Policy Mask fails → Default to safe denial, never leak unmasked data
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Users/LLMs (via MCP)                      │
