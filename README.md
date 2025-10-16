@@ -23,7 +23,8 @@ AgentMesh project - A flexible multi-layer adapter system for knowledge bases an
 - **KB Registration**: Register knowledge bases with connectivity checks and credential handling
 - **Directory Service**: Discover and query registered agents and KBs with filters
 - **Health Monitoring**: Background health checks with status tracking (active/degraded/offline)
-- **MCP Tools**: 9 new tools for agent/KB management via Claude Desktop
+- **Policy Management**: Dynamic OPA policy management (upload, update, list, delete policies)
+- **MCP Tools**: 13+ tools for agent/KB management and policy configuration via Claude Desktop
 
 ### Messaging Layer (NATS Integration) ✨ NEW
 - **Real-Time Notifications**: Agents receive instant notifications when new agents/KBs register
