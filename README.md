@@ -16,7 +16,7 @@
 
 ### Agent-to-Knowledge Base Interaction
 
-![Agent to Knowledge Base Flow](./assets/agent-kb.jpeg)
+![Agent to Knowledge Base Flow](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/agent-kb.jpeg)
 
 **Detailed Query Flow:**
 
