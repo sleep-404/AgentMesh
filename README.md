@@ -143,8 +143,15 @@ uv sync --all-extras --all-groups
 │           └── fixtures/              # Test data and configs
 ├── architectures/                     # Architecture diagrams
 ├── knowledge/                         # Documentation and knowledge base
+├── db/                                # Database initialization scripts and volumes
+│   ├── knowledge_base/                # Knowledge base layer databases
+│   │   ├── neo4j/                     # Neo4j init scripts
+│   │   │   ├── init-neo4j.cypher      # Neo4j sample data
+│   │   │   └── init-neo4j.sh          # Neo4j initialization script
+│   │   └── postgres/                  # PostgreSQL init scripts
+│   │       └── init-postgres.sql      # PostgreSQL sample data
+│   └── persistence/                   # Persistence layer (reserved for future use)
 ├── docker-compose.yaml                # Unified database setup
-├── init-postgres.sql                  # PostgreSQL sample data
 ├── claude_desktop_config.json         # Reference Claude Desktop config
 ├── MCP_SETUP.md                       # MCP server setup guide
 ├── .pre-commit-config.yaml            # Pre-commit hooks configuration
