@@ -18,10 +18,17 @@ AgentMesh project - A flexible multi-layer adapter system for knowledge bases an
 - **SQLite Adapter**: Production-ready persistence with automatic migrations
 - **PostgreSQL-Ready**: Future-proof design for TimescaleDB and production deployments
 
+### Registry Services Layer
+- **Agent Registration**: Register agents with validation, health checks, and automatic monitoring
+- **KB Registration**: Register knowledge bases with connectivity checks and credential handling
+- **Directory Service**: Discover and query registered agents and KBs with filters
+- **Health Monitoring**: Background health checks with status tracking (active/degraded/offline)
+- **MCP Tools**: 9 new tools for agent/KB management via Claude Desktop
+
 ### Integration & Developer Experience
 - **MCP Server Integration**: Expose adapters via Model Context Protocol for Claude Desktop
 - **Docker Integration**: Ready-to-use Docker configurations for local development
-- **Comprehensive Testing**: 46 integration tests (23 KB + 23 persistence) with real database instances
+- **Comprehensive Testing**: 78 integration tests covering all layers (KB, persistence, services)
 - **Automatic Migrations**: Schema versioning and migration system built-in
 
 ## Prerequisites
@@ -79,9 +86,10 @@ uv run mypy .
 
 ### Running Tests
 
-The test suite includes 46 integration tests across two layers:
+The test suite includes 78 integration tests across three layers:
 - **Knowledge Base Tests (23 tests)**: PostgreSQL and Neo4j with Docker
 - **Persistence Tests (23 tests)**: SQLite with in-memory databases
+- **Registry Service Tests (32 tests)**: Agent/KB registration, directory, health monitoring
 
 **Important**: Make sure Docker is running before executing knowledge base tests.
 
@@ -94,6 +102,9 @@ uv run pytest tests/adapters/knowledge_base/
 
 # Run persistence tests only (no Docker needed)
 uv run pytest tests/adapters/persistence/
+
+# Run registry service tests only (no Docker needed)
+uv run pytest tests/services/registry/
 
 # Run specific test file
 uv run pytest tests/adapters/knowledge_base/test_postgres.py
@@ -121,6 +132,11 @@ uv run pytest tests/adapters/knowledge_base/test_postgres.py::test_health
 2. Migrations run automatically
 3. Tests execute against isolated databases
 4. Databases are cleaned up after each test
+
+*Registry Service Tests:*
+1. Temporary SQLite databases are created for each test
+2. Service layer is tested with validation, connectivity checks, and health monitoring
+3. No external dependencies required
 
 **Note**: The first KB test run may take a few minutes while Docker images are downloaded.
 
@@ -266,6 +282,80 @@ result = await adapter.execute(
 )
 
 await adapter.disconnect()
+```
+
+### Registry Services Layer
+
+The registry services layer provides high-level agent and KB management with validation, health checks, and monitoring.
+
+```python
+from services.registry import AgentService, KBService, DirectoryService, HealthService
+from services.registry.schemas import (
+    AgentRegistrationRequest, KBRegistrationRequest,
+    AgentListRequest, KBListRequest
+)
+from adapters.persistence.sqlite import SQLitePersistenceAdapter
+
+# Initialize persistence
+persistence = SQLitePersistenceAdapter("adapters/persistence/sqlite/config.yaml")
+await persistence.connect()
+
+# Initialize services
+agent_service = AgentService(persistence)
+kb_service = KBService(persistence)
+directory_service = DirectoryService(persistence)
+health_service = HealthService(persistence)
+
+# Register an agent
+agent_req = AgentRegistrationRequest(
+    identity="sales-agent-1",
+    version="1.0.0",
+    capabilities=["query_kb", "analyze_data"],
+    operations=["query", "invoke"],
+    health_endpoint="http://localhost:8001/health",
+    metadata={"team": "sales", "region": "us-west"}
+)
+response = await agent_service.register_agent(agent_req)
+print(f"Agent registered: {response.agent_id}, Status: {response.status}")
+
+# Register a knowledge base (PostgreSQL)
+kb_req = KBRegistrationRequest(
+    kb_id="sales-kb-1",
+    kb_type="postgres",
+    endpoint="postgresql://user:pass@localhost:5432/sales",
+    operations=["sql_query"],
+    metadata={"description": "Sales database"}
+)
+response = await kb_service.register_kb(kb_req)
+print(f"KB registered: {response.kb_id}, Status: {response.status}")
+
+# Register a knowledge base (Neo4j with credentials)
+kb_req = KBRegistrationRequest(
+    kb_id="graph-kb-1",
+    kb_type="neo4j",
+    endpoint="bolt://localhost:7687",  # No credentials in URI!
+    operations=["cypher_query", "create_node"],
+    credentials={  # Pass separately
+        "username": "neo4j",
+        "password": "admin123"
+    },
+    metadata={"description": "Graph database"}
+)
+response = await kb_service.register_kb(kb_req)
+
+# List all agents
+agents = await directory_service.list_agents(AgentListRequest())
+for agent in agents.agents:
+    print(f"Agent: {agent.identity}, Status: {agent.status}")
+
+# Check health
+from services.registry.schemas import HealthCheckRequest
+health_req = HealthCheckRequest(entity_id="sales-agent-1", entity_type="agent")
+health = await health_service.check_health(health_req)
+print(f"Health: {health.status}, Latency: {health.latency_ms}ms")
+
+# Start background monitoring
+await health_service.start_monitoring(interval_seconds=30)
 ```
 
 ### Persistence Layer (Mesh State)
