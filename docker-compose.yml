@@ -13,13 +13,15 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_kb_data:/var/lib/postgresql/data  # Persistent data storage
-      - ./db/knowledge_base/postgres/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Initial data script (runs only once)
+      - postgres_kb_data:/var/lib/postgresql/data
+      - ./db/knowledge_base/postgres/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d agentmesh"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - agentmesh
 
   neo4j:
     image: neo4j:5.15-community
@@ -32,14 +34,16 @@ services:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt
     volumes:
-      - neo4j_data:/data              # Persistent data storage
-      - neo4j_logs:/logs              # Persistent logs
-      - ./db/knowledge_base/neo4j/init-neo4j.cypher:/init-data/init-neo4j.cypher:ro  # Initial data script
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - ./db/knowledge_base/neo4j/init-neo4j.cypher:/init-data/init-neo4j.cypher:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - agentmesh
 
   neo4j-init:
     image: neo4j:5.15-community
@@ -55,7 +59,7 @@ services:
     network_mode: "service:neo4j"
 
   # ============================================
-  # MESSAGING LAYER
+  # MESSAGING LAYER (NATS)
   # ============================================
 
   nats:
@@ -69,6 +73,33 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - agentmesh
+
+  # ============================================
+  # POLICY ENGINE (OPA)
+  # ============================================
+
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: agentmesh-opa
+    ports:
+      - "8181:8181"    # OPA API
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=info"
+      - "/policies"
+    volumes:
+      - ./policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8181/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentmesh
 
   # ============================================
   # MESH PERSISTENCE LAYER
@@ -77,9 +108,9 @@ services:
   # SQLite (Default):
   # -----------------
   # The default persistence adapter uses SQLite (file-based).
-  # No Docker container is needed - the database is stored at: data/agentmesh.db
-  # Configuration: adapters/persistence/sqlite/config.yaml
-  # Init scripts: db/persistence/init-sqlite.sql
+  # No Docker container is needed - the database is stored at: ../data/agentmesh.db
+  # Configuration: ../adapters/persistence/sqlite/config.yaml
+  # Init scripts: ../db/persistence/init-sqlite.sql
   #
   # SQLite is suitable for:
   # - Development and testing
@@ -106,33 +137,70 @@ services:
   #     - "5433:5432"  # Different port to avoid conflict with KB postgres
   #   volumes:
   #     - postgres_persistence_data:/var/lib/postgresql/data
-  #     - ./db/persistence/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
+  #     - ../db/persistence/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
   #   healthcheck:
   #     test: ["CMD-SHELL", "pg_isready -U admin -d agentmesh_persistence"]
   #     interval: 5s
   #     timeout: 5s
   #     retries: 5
+  #   networks:
+  #     - agentmesh
 
   # ============================================
-  # POLICY ENGINE (OPA)
+  # DEMO AGENTS (OPTIONAL)
   # ============================================
+  #
+  # Uncomment these services to run demo agents that showcase
+  # different frameworks (CrewAI, Langraph, Lyzr, OpenAI)
+  #
+  # demo-rest-agents:
+  #   build:
+  #     context: ..
+  #     dockerfile: dummy_agents/Dockerfile.rest
+  #   container_name: agentmesh-demo-rest
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #   depends_on:
+  #     - nats
+  #     - opa
+  #   networks:
+  #     - agentmesh
+  #
+  # demo-grpc-agents:
+  #   build:
+  #     context: ..
+  #     dockerfile: dummy_agents/Dockerfile.grpc
+  #   container_name: agentmesh-demo-grpc
+  #   ports:
+  #     - "50051:50051"
+  #   environment:
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #   depends_on:
+  #     - nats
+  #     - opa
+  #   networks:
+  #     - agentmesh
 
-  opa:
-    image: openpolicyagent/opa:latest
-    container_name: agentmesh-opa
-    ports:
-      - "8181:8181"    # OPA API
-    command:
-      - "run"
-      - "--server"
-      - "--addr=0.0.0.0:8181"
-      - "--log-level=info"
-      - "/policies"
-    volumes:
-      - ./policies:/policies:ro
+# ============================================
+# VOLUMES
+# ============================================
 
 volumes:
   postgres_kb_data:
+    driver: local
   neo4j_data:
+    driver: local
   neo4j_logs:
+    driver: local
   # postgres_persistence_data:  # Uncomment if using PostgreSQL for persistence
+
+# ============================================
+# NETWORKS
+# ============================================
+
+networks:
+  agentmesh:
+    driver: bridge
+    name: agentmesh-network

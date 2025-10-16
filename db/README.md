@@ -34,7 +34,7 @@ Reserved for future persistence layer implementation.
 
 ## Usage
 
-These init scripts are mounted into their respective Docker containers via `docker-compose.yaml`:
+These init scripts are mounted into their respective Docker containers via `docker-compose.yml`:
 
 - Neo4j scripts run once when the container is first created
 - PostgreSQL scripts run automatically via Docker's `docker-entrypoint-initdb.d` mechanism

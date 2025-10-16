@@ -47,7 +47,7 @@ AgentMesh provides a governed infrastructure for AI agents with three key layers
 
 ### OPA Container Configuration
 
-The OPA container is defined in `docker-compose.yaml`:
+The OPA container is defined in `docker-compose.yml`:
 
 ```yaml
 opa:
