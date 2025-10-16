@@ -395,6 +395,90 @@ async def list_tools() -> list[Tool]:
         ]
     )
 
+    # Policy management tools (OPA)
+    if opa_client:
+        tools.extend(
+            [
+                Tool(
+                    name="list_policies",
+                    description="List all policies loaded in OPA",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                ),
+                Tool(
+                    name="get_policy",
+                    description="Get a specific policy by ID",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "policy_id": {
+                                "type": "string",
+                                "description": "Policy identifier (e.g., 'agentmesh')",
+                            },
+                        },
+                        "required": ["policy_id"],
+                    },
+                ),
+                Tool(
+                    name="get_policy_content",
+                    description="Get just the policy content (raw Rego code) for a specific policy",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "policy_id": {
+                                "type": "string",
+                                "description": "Policy identifier (e.g., 'agentmesh')",
+                            },
+                        },
+                        "required": ["policy_id"],
+                    },
+                ),
+                Tool(
+                    name="upload_policy",
+                    description="Upload or update a policy in OPA (provide Rego policy content). Policy is automatically saved to disk for persistence.",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "policy_id": {
+                                "type": "string",
+                                "description": "Unique policy identifier (e.g., 'my-custom-policy')",
+                            },
+                            "policy_content": {
+                                "type": "string",
+                                "description": "Rego policy content as string",
+                            },
+                            "persist": {
+                                "type": "boolean",
+                                "description": "Save policy to disk for persistence (default: true)",
+                            },
+                        },
+                        "required": ["policy_id", "policy_content"],
+                    },
+                ),
+                Tool(
+                    name="delete_policy",
+                    description="Delete a policy from OPA and optionally from disk",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "policy_id": {
+                                "type": "string",
+                                "description": "Policy identifier to delete",
+                            },
+                            "delete_file": {
+                                "type": "boolean",
+                                "description": "Also delete the policy file from disk (default: true)",
+                            },
+                        },
+                        "required": ["policy_id"],
+                    },
+                ),
+            ]
+        )
+
     # Routing tools (governance layer)
     if request_router:
         tools.extend(
@@ -628,6 +712,68 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                     ),
                 )
             ]
+
+        # Handle policy management tools (OPA)
+        elif name == "list_policies":
+            if not opa_client:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"error": "OPA client not available"}),
+                    )
+                ]
+            result = await opa_client.list_policies()
+            return [TextContent(type="text", text=json.dumps(result))]
+
+        elif name == "get_policy":
+            if not opa_client:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"error": "OPA client not available"}),
+                    )
+                ]
+            result = await opa_client.get_policy(arguments["policy_id"])
+            return [TextContent(type="text", text=json.dumps(result))]
+
+        elif name == "get_policy_content":
+            if not opa_client:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"error": "OPA client not available"}),
+                    )
+                ]
+            result = await opa_client.get_policy_content(arguments["policy_id"])
+            return [TextContent(type="text", text=json.dumps(result))]
+
+        elif name == "upload_policy":
+            if not opa_client:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"error": "OPA client not available"}),
+                    )
+                ]
+            persist = arguments.get("persist", True)
+            result = await opa_client.upload_policy(
+                arguments["policy_id"], arguments["policy_content"], persist=persist
+            )
+            return [TextContent(type="text", text=json.dumps(result))]
+
+        elif name == "delete_policy":
+            if not opa_client:
+                return [
+                    TextContent(
+                        type="text",
+                        text=json.dumps({"error": "OPA client not available"}),
+                    )
+                ]
+            delete_file = arguments.get("delete_file", True)
+            result = await opa_client.delete_policy(
+                arguments["policy_id"], delete_file=delete_file
+            )
+            return [TextContent(type="text", text=json.dumps(result))]
 
         # Handle routing tools (governance layer)
         elif name == "query_kb_governed":
