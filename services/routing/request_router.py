@@ -62,14 +62,18 @@ class RequestRouter:
         """Start the request router and subscribe to routing subjects."""
         logger.info("Starting request router...")
 
-        # Subscribe to routing subjects
-        await self.nats.subscribe("mesh.routing.kb_query", self._handle_kb_query_msg)
-        await self.nats.subscribe(
-            "mesh.routing.agent_invoke", self._handle_agent_invoke_msg
-        )
-        await self.nats.subscribe(
-            "mesh.routing.completion", self._handle_completion_msg
-        )
+        # Subscribe to routing subjects with request-reply handlers
+        if self.nats.nc:
+            # KB query handler (request-reply)
+            await self.nats.nc.subscribe("mesh.routing.kb_query", cb=self._handle_kb_query_nats_rr)
+            
+            # Agent invoke handler (request-reply)
+            await self.nats.nc.subscribe("mesh.routing.agent_invoke", cb=self._handle_agent_invoke_nats_rr)
+            
+            # Completion handler (pub/sub, no reply needed)
+            await self.nats.subscribe(
+                "mesh.routing.completion", self._handle_completion_msg
+            )
 
         logger.info("Request router started and listening for requests")
 
@@ -265,25 +269,85 @@ class RequestRouter:
     # NATS MESSAGE HANDLERS
     # ============================================
 
-    async def _handle_kb_query_msg(self, message: dict[str, Any]) -> None:
-        """Handle KB query request from NATS."""
+    async def _handle_kb_query_nats_rr(self, msg) -> None:
+        """Handle KB query request from NATS with request-reply pattern."""
+        import json
+        
         try:
-            request = KBQueryRequest(**message)
+            # Parse request
+            request_data = json.loads(msg.data.decode())
+            logger.debug(f"Received KB query request via NATS: {request_data}")
+            
+            # Create request object
+            request = KBQueryRequest(
+                requester_id=request_data.get("requester_id", ""),
+                kb_id=request_data.get("kb_id", ""),
+                operation=request_data.get("operation", ""),
+                params=request_data.get("params", {}),
+            )
+            
+            # Route through enforcement
             response = await self.route_kb_query(request)
-            # In a real implementation, would reply to NATS request
-            logger.debug(f"KB query response: {response}")
+            
+            # Send response back via reply subject
+            response_data = {
+                "status": response.status,
+                "data": response.data,
+                "masked_fields": response.masked_fields,
+                "policy": response.policy,
+                "error": response.error,
+            }
+            
+            response_payload = json.dumps(response_data).encode()
+            await self.nats.nc.publish(msg.reply, response_payload)
+            logger.debug(f"Sent KB query response to {msg.reply}")
+            
         except Exception as e:
             logger.error(f"Failed to handle KB query message: {e}")
+            # Send error response
+            error_response = {
+                "status": "error",
+                "error": str(e),
+            }
+            await self.nats.nc.publish(msg.reply, json.dumps(error_response).encode())
 
-    async def _handle_agent_invoke_msg(self, message: dict[str, Any]) -> None:
-        """Handle agent invocation request from NATS."""
+    async def _handle_agent_invoke_nats_rr(self, msg) -> None:
+        """Handle agent invocation request from NATS with request-reply pattern."""
+        import json
+        
         try:
-            request = AgentInvokeRequest(**message)
+            # Parse request
+            request_data = json.loads(msg.data.decode())
+            logger.debug(f"Received agent invoke request via NATS: {request_data}")
+            
+            request = AgentInvokeRequest(
+                source_agent_id=request_data.get("source_agent_id", ""),
+                target_agent_id=request_data.get("target_agent_id", ""),
+                operation=request_data.get("operation", ""),
+                payload=request_data.get("payload", {}),
+            )
+            
             response = await self.route_agent_invoke(request)
-            # In a real implementation, would reply to NATS request
-            logger.debug(f"Agent invoke response: {response}")
+            
+            # Send response
+            response_data = {
+                "tracking_id": response.tracking_id,
+                "status": response.status,
+                "error": response.error,
+                "policy": response.policy,
+            }
+            
+            response_payload = json.dumps(response_data).encode()
+            await self.nats.nc.publish(msg.reply, response_payload)
+            logger.debug(f"Sent agent invoke response to {msg.reply}")
+            
         except Exception as e:
             logger.error(f"Failed to handle agent invoke message: {e}")
+            error_response = {
+                "status": "error",
+                "error": str(e),
+            }
+            await self.nats.nc.publish(msg.reply, json.dumps(error_response).encode())
 
     async def _handle_completion_msg(self, message: dict[str, Any]) -> None:
         """

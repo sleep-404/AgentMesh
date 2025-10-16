@@ -172,20 +172,60 @@ class DirectorySubscriber:
                 request_data = json.loads(msg.data.decode())
                 logger.debug(f"Received directory query: {request_data}")
 
+                # Start with all agents and KBs
+                agents = self.directory_cache["agents"]
+                kbs = self.directory_cache["kbs"]
+
+                # Apply capability filter for agents
+                capability_filter = request_data.get("capability_filter")
+                if capability_filter:
+                    agents = [
+                        agent for agent in agents
+                        if capability_filter in agent.get("capabilities", [])
+                    ]
+                    logger.debug(f"Filtered to {len(agents)} agents with capability '{capability_filter}'")
+
+                # Apply status filter for agents
+                status_filter = request_data.get("status_filter")
+                if status_filter:
+                    agents = [
+                        agent for agent in agents
+                        if agent.get("status") == status_filter
+                    ]
+                    logger.debug(f"Filtered to {len(agents)} agents with status '{status_filter}'")
+
+                # Apply type filter for KBs
+                type_filter = request_data.get("type_filter")
+                if type_filter:
+                    kbs = [
+                        kb for kb in kbs
+                        if kb.get("kb_type") == type_filter
+                    ]
+                    logger.debug(f"Filtered to {len(kbs)} KBs with type '{type_filter}'")
+
+                # Apply type-based filter (only agents or only kbs)
+                query_type = request_data.get("type", "both")
+                if query_type == "agents":
+                    kbs = []
+                elif query_type == "kbs":
+                    agents = []
+
                 # Build response
                 response = {
-                    "request_id": request_data.get("request_id", "unknown"),
-                    "agents": self.directory_cache["agents"],
-                    "kbs": self.directory_cache["kbs"],
+                    "agents": agents,
+                    "kbs": kbs,
+                    "total_count": len(agents) if query_type == "agents" else len(kbs) if query_type == "kbs" else len(agents) + len(kbs),
+                    "filters_applied": {},
                     "timestamp": datetime.now(UTC).isoformat(),
                 }
 
-                # Apply filter if specified
-                filter_type = request_data.get("filter")
-                if filter_type == "agents":
-                    response["kbs"] = []
-                elif filter_type == "kbs":
-                    response["agents"] = []
+                # Track which filters were applied
+                if capability_filter:
+                    response["filters_applied"]["capability"] = capability_filter
+                if status_filter:
+                    response["filters_applied"]["status"] = status_filter
+                if type_filter:
+                    response["filters_applied"]["type"] = type_filter
 
                 # Send response
                 response_payload = json.dumps(response).encode()

@@ -78,6 +78,11 @@ class BasePersistenceAdapter(ABC):
         pass
 
     @abstractmethod
+    async def update_agent_capabilities(self, identity: str, capabilities: list[str]) -> None:
+        """Update agent capabilities"""
+        pass
+
+    @abstractmethod
     async def list_agents(self, query: RegistryQuery) -> list[AgentRecord]:
         """Query agent registry"""
         pass
@@ -107,6 +112,11 @@ class BasePersistenceAdapter(ABC):
     @abstractmethod
     async def update_kb_status(self, kb_id: str, status: str) -> None:
         """Update KB health status"""
+        pass
+
+    @abstractmethod
+    async def update_kb_operations(self, kb_id: str, operations: list[str]) -> None:
+        """Update KB operations"""
         pass
 
     @abstractmethod

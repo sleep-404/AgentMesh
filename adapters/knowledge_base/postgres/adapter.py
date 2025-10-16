@@ -1,6 +1,7 @@
 """PostgreSQL adapter implementation."""
 
 import time
+from decimal import Decimal
 from typing import Any
 
 import asyncpg
@@ -120,6 +121,30 @@ class PostgresAdapter(BaseKBAdapter):
 
     # Operation implementations
 
+    def _serialize_value(self, value: Any) -> Any:
+        """Convert PostgreSQL-specific types to JSON-serializable types.
+
+        Args:
+            value: Value to serialize
+
+        Returns:
+            JSON-serializable value
+        """
+        if isinstance(value, Decimal):
+            return float(value)
+        return value
+
+    def _serialize_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        """Serialize a row dict to JSON-serializable format.
+
+        Args:
+            row: Row dictionary
+
+        Returns:
+            Serialized row
+        """
+        return {key: self._serialize_value(value) for key, value in row.items()}
+
     async def _sql_query(
         self, query: str, params: dict[str, Any] | None = None
     ) -> SQLQueryOutput:
@@ -134,7 +159,8 @@ class PostgresAdapter(BaseKBAdapter):
         """
         async with self.pool.acquire() as conn:  # type: ignore[union-attr]
             rows = await conn.fetch(query, *(params.values() if params else []))
-            return SQLQueryOutput(rows=[dict(row) for row in rows], row_count=len(rows))
+            serialized_rows = [self._serialize_row(dict(row)) for row in rows]
+            return SQLQueryOutput(rows=serialized_rows, row_count=len(rows))
 
     async def _insert(self, table: str, data: dict[str, Any]) -> InsertOutput:
         """Insert data into a table.

@@ -114,6 +114,23 @@ class KBService:
                 f"KB '{request.kb_id}' registered successfully with record ID: {kb_record_id}"
             )
 
+            # Create audit log for KB registration
+            from adapters.persistence.schemas import AuditEvent, AuditEventType, AuditOutcome
+            audit_event = AuditEvent(
+                event_type=AuditEventType.REGISTER,
+                source_id="system",  # KB registration initiated by system/user
+                target_id=request.kb_id,
+                action="register_kb",
+                outcome=AuditOutcome.SUCCESS,
+                metadata={
+                    "kb_record_id": kb_record_id,
+                    "kb_type": request.kb_type,
+                    "operations": request.operations,
+                    "status": connectivity_status,
+                },
+            )
+            await self.persistence.log_event(audit_event)
+
             message = "KB registered successfully"
             if connectivity_status == HealthStatus.OFFLINE.value:
                 message += f" (Warning: {error_msg})"
@@ -320,6 +337,51 @@ class KBService:
             metadata=kb.metadata,
         )
 
+    async def update_kb_operations(
+        self, kb_id: str, operations: list[str]
+    ) -> KBDetailsResponse:
+        """
+        Update KB operations and broadcast notification.
+
+        Args:
+            kb_id: KB identifier
+            operations: New list of operations
+
+        Returns:
+            Updated KB details
+
+        Raises:
+            EntityNotFoundError: If KB not found
+            InvalidOperationError: If operation is not supported
+        """
+        # Get existing KB
+        kb = await self.persistence.get_kb(kb_id)
+        if not kb:
+            from .exceptions import EntityNotFoundError
+
+            raise EntityNotFoundError("KB", kb_id)
+
+        # Validate operations
+        self._validate_operations(kb.kb_type, operations)
+
+        # Store old operations for notification
+        old_operations = kb.operations
+
+        # Update operations in persistence
+        await self.persistence.update_kb_operations(kb_id, operations)
+        logger.info(
+            f"KB '{kb_id}' operations updated from {old_operations} to {operations}"
+        )
+
+        # Publish notification if NATS is available
+        if self.nats_client and self.nats_client.is_connected:
+            await self._publish_kb_operations_updated(
+                kb_id, kb.kb_type, old_operations, operations
+            )
+
+        # Return updated details
+        return await self.get_kb_details(kb_id)
+
     async def deregister_kb(self, kb_id: str) -> None:
         """
         Remove a KB from the registry.
@@ -367,3 +429,38 @@ class KBService:
             logger.debug(f"Published KB registration notification for {request.kb_id}")
         except Exception as e:
             logger.error(f"Failed to publish KB registration notification: {e}")
+
+    async def _publish_kb_operations_updated(
+        self,
+        kb_id: str,
+        kb_type: str,
+        old_operations: list[str],
+        new_operations: list[str],
+    ) -> None:
+        """
+        Publish KB operations update notification to NATS.
+
+        Args:
+            kb_id: KB identifier
+            kb_type: KB type
+            old_operations: Previous operations
+            new_operations: Updated operations
+        """
+        if self.nats_client is None:
+            return
+
+        try:
+            notification = {
+                "type": "kb_operations_updated",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "kb_id": kb_id,
+                    "kb_type": kb_type,
+                    "old_operations": old_operations,
+                    "operations": new_operations,
+                },
+            }
+            await self.nats_client.publish("mesh.directory.updates", notification)
+            logger.debug(f"Published KB operations update notification for {kb_id}")
+        except Exception as e:
+            logger.error(f"Failed to publish KB operations update notification: {e}")

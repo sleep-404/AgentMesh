@@ -78,6 +78,15 @@ allow_agent_invoke if {
     input.action == "invoke"
 }
 
+# Allow marketing agents to invoke support agents
+allow_agent_invoke if {
+    input.principal_type == "agent"
+    startswith(input.principal_id, "marketing-agent-")
+    input.resource_type == "agent"
+    startswith(input.resource_id, "support-agent-")
+    input.action == "invoke"
+}
+
 # Allow admin agents to invoke any agent
 allow_agent_invoke if {
     input.principal_type == "agent"

@@ -38,6 +38,19 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create customer_feedback table (for privacy scenario demo)
+CREATE TABLE IF NOT EXISTS customer_feedback (
+    id SERIAL PRIMARY KEY,
+    customer_name VARCHAR(200) NOT NULL,
+    customer_email VARCHAR(255) NOT NULL,
+    customer_phone VARCHAR(50),
+    objection TEXT,
+    region VARCHAR(50) NOT NULL,
+    priority VARCHAR(20) DEFAULT 'medium',
+    status VARCHAR(50) DEFAULT 'open',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- =====================================================
 -- Insert sample data
 -- =====================================================
@@ -69,6 +82,18 @@ INSERT INTO tasks (title, description, project_id, assigned_to, status, priority
     ('Setup testing framework', 'Configure pytest and integration tests', 1, 2, 'completed', 'medium', '2024-01-30')
 ON CONFLICT DO NOTHING;
 
+-- Insert sample customer feedback (for privacy scenario demo)
+INSERT INTO customer_feedback (customer_name, customer_email, customer_phone, objection, region, priority, status) VALUES
+    ('Acme Corp', 'contact@acme.com', '+65-1234-5678', 'Price too high compared to competitors', 'APAC', 'high', 'open'),
+    ('TechStart Inc', 'info@techstart.io', '+65-8765-4321', 'Need more API integrations', 'APAC', 'medium', 'open'),
+    ('GlobalSoft Ltd', 'sales@globalsoft.com', '+65-2468-1357', 'Concerned about data security', 'APAC', 'high', 'in_progress'),
+    ('DataFlow Systems', 'hello@dataflow.net', '+65-9876-5432', 'Implementation timeline unclear', 'APAC', 'medium', 'open'),
+    ('CloudNine Solutions', 'contact@cloudnine.co', '+65-5555-1234', 'Missing enterprise features', 'APAC', 'high', 'open'),
+    ('Innovate Labs', 'team@innovatelabs.com', '+1-555-0123', 'Need better documentation', 'Americas', 'low', 'resolved'),
+    ('EuroTech GmbH', 'kontakt@eurotech.de', '+49-123-456789', 'GDPR compliance questions', 'EMEA', 'high', 'in_progress'),
+    ('Digital Ventures', 'info@digitalventures.co.uk', '+44-20-1234-5678', 'Scalability concerns', 'EMEA', 'medium', 'open')
+ON CONFLICT DO NOTHING;
+
 -- =====================================================
 -- Create useful indexes for better query performance
 -- =====================================================
@@ -80,6 +105,9 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_customer_feedback_region ON customer_feedback(region);
+CREATE INDEX IF NOT EXISTS idx_customer_feedback_status ON customer_feedback(status);
+CREATE INDEX IF NOT EXISTS idx_customer_feedback_priority ON customer_feedback(priority);
 
 -- =====================================================
 -- Create a view for easier querying

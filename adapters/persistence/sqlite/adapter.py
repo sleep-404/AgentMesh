@@ -179,6 +179,23 @@ class SQLitePersistenceAdapter(BasePersistenceAdapter):
         except Exception as e:
             raise QueryError(f"Failed to update agent status: {e}") from e
 
+    async def update_agent_capabilities(self, identity: str, capabilities: list[str]) -> None:
+        """Update agent capabilities"""
+        assert self.conn is not None, "Adapter not connected"
+        try:
+            capabilities_json = json.dumps(capabilities)
+            await self.conn.execute(
+                """
+                UPDATE agents
+                SET capabilities = ?
+                WHERE identity = ?
+                """,
+                (capabilities_json, identity),
+            )
+            await self.conn.commit()
+        except Exception as e:
+            raise QueryError(f"Failed to update agent capabilities: {e}") from e
+
     async def list_agents(self, query: RegistryQuery) -> list[AgentRecord]:
         """Query agents with filters"""
         assert self.conn is not None, "Adapter not connected"
@@ -195,10 +212,15 @@ class SQLitePersistenceAdapter(BasePersistenceAdapter):
                 params.append(query.status.value)
 
             if query.capabilities:
-                # SQLite JSON query
+                # SQLite JSON query - use json_each for proper array membership check
                 for cap in query.capabilities:
-                    conditions.append("json_extract(capabilities, '$') LIKE ?")
-                    params.append(f'%"{cap}"%')
+                    conditions.append(
+                        """EXISTS (
+                            SELECT 1 FROM json_each(capabilities) 
+                            WHERE json_each.value = ?
+                        )"""
+                    )
+                    params.append(cap)
 
             where_clause = " AND ".join(conditions) if conditions else "1=1"
             sql = f"SELECT * FROM agents WHERE {where_clause} LIMIT ?"
@@ -325,6 +347,23 @@ class SQLitePersistenceAdapter(BasePersistenceAdapter):
             await self.conn.commit()
         except Exception as e:
             raise QueryError(f"Failed to update KB status: {e}") from e
+
+    async def update_kb_operations(self, kb_id: str, operations: list[str]) -> None:
+        """Update KB operations"""
+        assert self.conn is not None, "Adapter not connected"
+        try:
+            operations_json = json.dumps(operations)
+            await self.conn.execute(
+                """
+                UPDATE knowledge_bases
+                SET operations = ?
+                WHERE kb_id = ?
+                """,
+                (operations_json, kb_id),
+            )
+            await self.conn.commit()
+        except Exception as e:
+            raise QueryError(f"Failed to update KB operations: {e}") from e
 
     async def list_kbs(self, query: RegistryQuery) -> list[KBRecord]:
         """Query KB registry"""

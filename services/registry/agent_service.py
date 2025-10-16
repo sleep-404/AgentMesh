@@ -28,7 +28,7 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 # Allowed operations for agents
-ALLOWED_OPERATIONS = ["publish", "query", "subscribe", "invoke"]
+ALLOWED_OPERATIONS = ["publish", "query", "subscribe", "invoke", "execute"]
 
 
 class AgentService:
@@ -99,6 +99,23 @@ class AgentService:
             logger.info(
                 f"Agent '{request.identity}' registered successfully with ID: {agent_id}"
             )
+
+            # Create audit log for agent registration
+            from adapters.persistence.schemas import AuditEvent, AuditEventType, AuditOutcome
+            audit_event = AuditEvent(
+                event_type=AuditEventType.REGISTER,
+                source_id=request.identity,
+                target_id=None,
+                action="register",
+                outcome=AuditOutcome.SUCCESS,
+                metadata={
+                    "agent_id": agent_id,
+                    "version": request.version,
+                    "capabilities": request.capabilities,
+                    "operations": request.operations,
+                },
+            )
+            await self.persistence.log_event(audit_event)
 
             response = AgentRegistrationResponse(
                 agent_id=agent_id,
@@ -265,6 +282,47 @@ class AgentService:
             metadata=agent.metadata,
         )
 
+    async def update_agent_capabilities(
+        self, identity: str, capabilities: list[str]
+    ) -> AgentDetailsResponse:
+        """
+        Update agent capabilities and broadcast notification.
+
+        Args:
+            identity: Agent identity
+            capabilities: New list of capabilities
+
+        Returns:
+            Updated agent details
+
+        Raises:
+            EntityNotFoundError: If agent not found
+        """
+        # Get existing agent
+        agent = await self.persistence.get_agent(identity)
+        if not agent:
+            from .exceptions import EntityNotFoundError
+
+            raise EntityNotFoundError("Agent", identity)
+
+        # Store old capabilities for notification
+        old_capabilities = agent.capabilities
+
+        # Update capabilities in persistence
+        await self.persistence.update_agent_capabilities(identity, capabilities)
+        logger.info(
+            f"Agent '{identity}' capabilities updated from {old_capabilities} to {capabilities}"
+        )
+
+        # Publish notification if NATS is available
+        if self.nats_client and self.nats_client.is_connected:
+            await self._publish_agent_capability_updated(
+                identity, agent.version, old_capabilities, capabilities
+            )
+
+        # Return updated details
+        return await self.get_agent_details(identity)
+
     async def deregister_agent(self, identity: str) -> None:
         """
         Remove an agent from the registry.
@@ -315,3 +373,40 @@ class AgentService:
             )
         except Exception as e:
             logger.error(f"Failed to publish agent registration notification: {e}")
+
+    async def _publish_agent_capability_updated(
+        self,
+        identity: str,
+        version: str,
+        old_capabilities: list[str],
+        new_capabilities: list[str],
+    ) -> None:
+        """
+        Publish agent capability update notification to NATS.
+
+        Args:
+            identity: Agent identity
+            version: Agent version
+            old_capabilities: Previous capabilities
+            new_capabilities: Updated capabilities
+        """
+        if self.nats_client is None:
+            return
+
+        try:
+            notification = {
+                "type": "agent_capability_updated",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "identity": identity,
+                    "version": version,
+                    "old_capabilities": old_capabilities,
+                    "capabilities": new_capabilities,
+                },
+            }
+            await self.nats_client.publish("mesh.directory.updates", notification)
+            logger.debug(
+                f"Published agent capability update notification for {identity}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to publish agent capability update notification: {e}")
