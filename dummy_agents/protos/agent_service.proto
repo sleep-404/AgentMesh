@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package agentservice;
+
+// Agent execution request
+message AgentRequest {
+    string task = 1;
+}
+
+// Agent execution response
+message AgentResponse {
+    string agent_type = 1;
+    string task = 2;
+    string result = 3;
+    string details = 4;  // JSON string with additional details
+    string status = 5;
+}
+
+// Agent service definition
+service AgentService {
+    // Execute Langraph agent (gRPC endpoint 1)
+    rpc ExecuteLangraphAgent(AgentRequest) returns (AgentResponse);
+
+    // Execute Lyzr agent (gRPC endpoint 2)
+    rpc ExecuteLyzrAgent(AgentRequest) returns (AgentResponse);
+}
