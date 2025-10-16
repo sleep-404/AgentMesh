@@ -8,7 +8,7 @@
 - [Core Design Decisions](#-design-philosophy)
 - [Setup & Installation](#-setup--installation)
 - [Demo Scenarios](#-demo-scenarios)
-- [Evaluation Criteria Mapping](#-evaluation-criteria-mapping)
+
 
 ---
 
