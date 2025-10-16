@@ -25,3 +25,9 @@ build/
 htmlcov/
 .DS_Store
 knowledge/
+
+# Test and verification files
+examples/test_complete_event_flow.py
+examples/test_event_emission.py
+examples/test_kb_nats.py
+examples/verify_events.py
