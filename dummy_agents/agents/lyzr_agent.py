@@ -5,7 +5,6 @@ This implementation is a placeholder that explains the incompatibility.
 To use real Lyzr, install lyzr-automata in a separate virtual environment.
 """
 import os
-from typing import Any
 
 from dummy_agents.base import BaseAgent
 
