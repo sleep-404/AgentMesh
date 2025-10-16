@@ -10,7 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data  # Persistent data storage
-      - ./init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Initial data script (runs only once)
+      - ./db/knowledge_base/postgres/init-postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Initial data script (runs only once)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d agentmesh"]
       interval: 5s
@@ -30,7 +30,7 @@ services:
     volumes:
       - neo4j_data:/data              # Persistent data storage
       - neo4j_logs:/logs              # Persistent logs
-      - ./init-neo4j.cypher:/init-data/init-neo4j.cypher:ro  # Initial data script
+      - ./db/knowledge_base/neo4j/init-neo4j.cypher:/init-data/init-neo4j.cypher:ro  # Initial data script
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
       interval: 5s
@@ -44,8 +44,8 @@ services:
       neo4j:
         condition: service_healthy
     volumes:
-      - ./init-neo4j.cypher:/init-data/init-neo4j.cypher:ro
-      - ./init-neo4j.sh:/init-neo4j.sh:ro
+      - ./db/knowledge_base/neo4j/init-neo4j.cypher:/init-data/init-neo4j.cypher:ro
+      - ./db/knowledge_base/neo4j/init-neo4j.sh:/init-neo4j.sh:ro
     entrypoint: ["/bin/bash", "/init-neo4j.sh"]
     restart: "no"
     network_mode: "service:neo4j"
