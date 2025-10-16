@@ -91,12 +91,13 @@ allow_agent_invoke if {
 # ============================================
 
 # Masking rules for sales KB based on requester
+# Marketing and sales agents have the same access level
 masking_rules = rules if {
     input.principal_type == "agent"
     startswith(input.principal_id, "marketing-agent-")
     input.resource_type == "kb"
     input.resource_id == "sales-kb-1"
-    rules := ["customer_email", "customer_phone", "ssn", "credit_card"]
+    rules := ["ssn", "credit_card"]
 }
 
 masking_rules = rules if {
