@@ -87,7 +87,7 @@ class NATSWrapper:
 
                 # Run callback
                 if asyncio.iscoroutinefunction(callback):
-                    result = await callback(data)
+                    result: dict[str, Any] | None = await callback(data)
 
                     # If callback returns a result and message has reply subject, send response
                     if result is not None and msg.reply and self.nc:

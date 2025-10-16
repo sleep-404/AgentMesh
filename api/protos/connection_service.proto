@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package agentmesh;
+
+// Service for agent connections to the mesh
+service ConnectionService {
+  // Connect an agent to the mesh
+  rpc ConnectAgent(ConnectRequest) returns (ConnectResponse) {}
+
+  // Disconnect an agent from the mesh
+  rpc DisconnectAgent(DisconnectRequest) returns (DisconnectResponse) {}
+
+  // Send heartbeat
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse) {}
+
+  // List connected agents
+  rpc ListConnectedAgents(ListAgentsRequest) returns (ListAgentsResponse) {}
+}
+
+// Request to connect an agent
+message ConnectRequest {
+  string endpoint = 1;  // Agent's endpoint URL
+  string token = 2;     // Authentication token
+  map<string, string> metadata = 3;  // Optional metadata
+}
+
+// Response after successful connection
+message ConnectResponse {
+  string agent_id = 1;              // Assigned agent ID
+  string private_subject = 2;       // Private NATS subject
+  repeated string global_subjects = 3;  // Global NATS subjects
+  string connection_status = 4;     // Status
+  string connected_at = 5;          // ISO timestamp
+  string message = 6;               // Confirmation message
+}
+
+// Request to disconnect
+message DisconnectRequest {
+  string agent_id = 1;
+  string reason = 2;
+}
+
+// Response after disconnect
+message DisconnectResponse {
+  string status = 1;
+  string message = 2;
+}
+
+// Heartbeat request
+message HeartbeatRequest {
+  string agent_id = 1;
+  string timestamp = 2;  // ISO timestamp
+  string status = 3;
+  map<string, string> metadata = 4;
+}
+
+// Heartbeat response
+message HeartbeatResponse {
+  string status = 1;
+  string message = 2;
+}
+
+// List agents request
+message ListAgentsRequest {
+  // Empty for now
+}
+
+// Agent info
+message AgentInfo {
+  string agent_id = 1;
+  string endpoint = 2;
+  string private_subject = 3;
+  string connected_at = 4;
+  string last_heartbeat = 5;
+}
+
+// List agents response
+message ListAgentsResponse {
+  repeated AgentInfo agents = 1;
+  int32 count = 2;
+}
