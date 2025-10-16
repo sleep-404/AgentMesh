@@ -19,20 +19,21 @@ import sys
 from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
+from adapters.knowledge_base.neo4j.adapter import Neo4jAdapter
+from adapters.knowledge_base.postgres.adapter import PostgresAdapter
+from adapters.messaging.nats_client import NATSWrapper
+from adapters.persistence.sqlite.adapter import SQLitePersistenceAdapter
+from adapters.policy.opa_client import OPAClient
+from services.enforcement.enforcement_service import EnforcementService
 from services.registry.agent_service import AgentService
 from services.registry.kb_service import KBService
 from services.registry.schemas import (
     AgentRegistrationRequest,
     KBRegistrationRequest,
 )
-from services.enforcement.enforcement_service import EnforcementService
-from adapters.persistence.sqlite.adapter import SQLitePersistenceAdapter
-from adapters.policy.opa_client import OPAClient
-from adapters.messaging.nats_client import NATSWrapper
-from adapters.knowledge_base.postgres.adapter import PostgresAdapter
-from adapters.knowledge_base.neo4j.adapter import Neo4jAdapter
 
 
 async def main():
@@ -43,52 +44,55 @@ async def main():
 
     # Initialize services
     print("📦 Initializing services...")
-    persistence = SQLitePersistenceAdapter("adapters/persistence/sqlite/config.yaml")
+    persistence = SQLitePersistenceAdapter(
+        str(PROJECT_ROOT / "adapters/persistence/sqlite/config.yaml")
+    )
     await persistence.connect()
-    
+
     agent_service = AgentService(persistence)
     kb_service = KBService(persistence)
-    
+
     opa_client = OPAClient()
     nats_client = NATSWrapper()
     await nats_client.connect()
-    
+
     # Initialize KB adapters
-    postgres_adapter = PostgresAdapter("adapters/knowledge_base/postgres/config.yaml")
+    postgres_adapter = PostgresAdapter(
+        str(PROJECT_ROOT / "adapters/knowledge_base/postgres/config.yaml")
+    )
     await postgres_adapter.connect()
-    
-    neo4j_adapter = Neo4jAdapter("adapters/knowledge_base/neo4j/config.yaml")
+
+    neo4j_adapter = Neo4jAdapter(
+        str(PROJECT_ROOT / "adapters/knowledge_base/neo4j/config.yaml")
+    )
     await neo4j_adapter.connect()
-    
-    kb_adapters = {
-        "postgres": postgres_adapter,
-        "neo4j": neo4j_adapter
-    }
-    
+
+    kb_adapters = {"postgres": postgres_adapter, "neo4j": neo4j_adapter}
+
     # Note: Not passing nats_client to use direct adapter fallback for simplicity
     # In production, KB adapters would be listening on NATS subjects
     enforcement_service = EnforcementService(
         opa_client=opa_client,
         persistence=persistence,
         kb_adapters=kb_adapters,
-        nats_client=None  # Use direct adapter fallback
+        nats_client=None,  # Use direct adapter fallback
     )
-    
+
     print("✅ Services initialized\n")
 
     # Step 1: Register marketing agent
     print("Step 1: Register Marketing Agent")
     print("-" * 70)
-    
+
     agent_req = AgentRegistrationRequest(
         identity="marketing-agent-2",
         version="1.0.0",
         capabilities=["query_kb", "analyze_data"],
         operations=["query", "subscribe"],
         health_endpoint="http://localhost:8002/health",
-        metadata={"team": "marketing", "department": "customer_insights"}
+        metadata={"team": "marketing", "department": "customer_insights"},
     )
-    
+
     try:
         agent_response = await agent_service.register_agent(agent_req)
         print(f"✅ Agent registered: {agent_response.agent_id}")
@@ -101,7 +105,7 @@ async def main():
     # Step 2: Register sales KB
     print("Step 2: Register Sales Knowledge Base (PostgreSQL)")
     print("-" * 70)
-    
+
     kb_req = KBRegistrationRequest(
         kb_id="sales-kb-1",
         kb_type="postgres",
@@ -110,10 +114,10 @@ async def main():
         metadata={
             "description": "Sales CRM database",
             "owner": "sales-team",
-            "sensitive_fields": ["customer_email", "customer_phone", "ssn"]
-        }
+            "sensitive_fields": ["customer_email", "customer_phone", "ssn"],
+        },
     )
-    
+
     try:
         kb_response = await kb_service.register_kb(kb_req)
         print(f"✅ KB registered: {kb_response.kb_id}")
@@ -126,7 +130,7 @@ async def main():
     # Step 3: Upload privacy policy
     print("Step 3: Upload Privacy Policy")
     print("-" * 70)
-    
+
     policy_rego = """
 package agentmesh
 
@@ -157,13 +161,14 @@ deny if {
     input.action == "write"
 }
 """
-    
+
     try:
         policy_response = await opa_client.upload_policy(
-            policy_id="agentmesh",
-            policy_content=policy_rego
+            policy_id="agentmesh", policy_content=policy_rego
         )
-        print(f"✅ Policy uploaded: {policy_response.get('result', {}).get('id', 'agentmesh')}")
+        print(
+            f"✅ Policy uploaded: {policy_response.get('result', {}).get('id', 'agentmesh')}"
+        )
         print()
     except Exception as e:
         print(f"⚠️  Policy may already exist: {e}")
@@ -172,40 +177,40 @@ deny if {
     # Step 4: Query KB with governed access
     print("Step 4: Marketing Queries Sales KB (Governed)")
     print("-" * 70)
-    
+
     query_params = {
         "requester_id": "marketing-agent-2",
         "kb_id": "sales-kb-1",
         "operation": "sql_query",
         "params": {
             "query": "SELECT customer_name, customer_email, customer_phone, objection, region FROM customer_feedback WHERE region='APAC' LIMIT 5",
-            "params": None
-        }
+            "params": None,
+        },
     }
-    
+
     print(f"Query: {query_params['params']['query']}")
     print()
-    
+
     try:
         response = await enforcement_service.enforce_kb_access(**query_params)
-        
+
         print("📊 Query Response (Field-Level Masking Applied):")
         print("-" * 70)
-        
+
         # Response is a dict with 'status', 'data' (SQLQueryOutput), 'masked_fields', 'policy'
         if response.get("status") == "success":
-            print(f"✅ Query executed successfully")
-            
+            print("✅ Query executed successfully")
+
             data = response.get("data")  # This is the SQLQueryOutput Pydantic model
             masked_fields = response.get("masked_fields", [])
-            
+
             # Get rows from the Pydantic model
-            rows = data.rows if hasattr(data, 'rows') else []
-            
+            rows = data.rows if hasattr(data, "rows") else []
+
             print(f"   Rows returned: {len(rows)}")
             print(f"   Fields Masked: {masked_fields}")
             print()
-            
+
             if rows:
                 print("Sample rows:")
                 for i, row in enumerate(rows[:3], 1):
@@ -214,38 +219,37 @@ deny if {
                         is_masked = key in masked_fields and value == "***"
                         masked = "🔒 MASKED" if is_masked else value
                         print(f"      {key}: {masked}")
-            
+
             # Show masked fields
             if masked_fields:
                 print(f"\n🔍 Fields Masked by Policy: {masked_fields}")
         else:
             print(f"❌ Query failed: {response.get('message')}")
-    
+
     except Exception as e:
         print(f"❌ Error querying KB: {e}")
         import traceback
+
         traceback.print_exc()
-    
+
     print()
 
     # Step 5: Query audit logs
     print("Step 5: View Audit Trail")
     print("-" * 70)
-    
-    from adapters.persistence.schemas import AuditQuery, AuditEventType
-    
+
+    from adapters.persistence.schemas import AuditEventType, AuditQuery
+
     audit_query = AuditQuery(
-        source_id="marketing-agent-2",
-        event_type=AuditEventType.QUERY,
-        limit=5
+        source_id="marketing-agent-2", event_type=AuditEventType.QUERY, limit=5
     )
-    
+
     try:
         audit_logs = await persistence.query_audit_logs(audit_query)
-        
-        print(f"📋 Recent audit logs for marketing-agent-2:")
+
+        print("📋 Recent audit logs for marketing-agent-2:")
         print()
-        
+
         for log in audit_logs:
             print(f"   Event ID: {log.id}")
             print(f"   Type: {log.event_type}")
@@ -254,16 +258,16 @@ deny if {
             print(f"   Masked Fields: {log.masked_fields or 'None'}")
             print(f"   Timestamp: {log.timestamp}")
             print()
-    
+
     except Exception as e:
         print(f"❌ Error querying audit logs: {e}")
-    
+
     # Cleanup
     await persistence.disconnect()
     await nats_client.disconnect()
     await postgres_adapter.disconnect()
     await neo4j_adapter.disconnect()
-    
+
     print("=" * 70)
     print("✅ Scenario 1 Complete!")
     print("=" * 70)
@@ -277,4 +281,3 @@ deny if {
 
 if __name__ == "__main__":
     asyncio.run(main())
-

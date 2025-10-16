@@ -352,15 +352,15 @@ async def main():
         "adapters/persistence/sqlite/config.yaml"
     )
     await persistence.connect()
-    
+
     agent_service = AgentService(persistence)
-    
+
     # Your scenario logic here
     # ...
-    
+
     # Cleanup
     await persistence.disconnect()
-    
+
     print("✅ Scenario Complete!")
 
 
@@ -413,4 +413,3 @@ if postgres_result["timeline"] != neo4j_result["timeline"]:
 ---
 
 **Happy experimenting with AgentMesh! 🎉**
-
