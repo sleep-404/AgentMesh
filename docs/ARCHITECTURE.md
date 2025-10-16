@@ -87,7 +87,7 @@
 1. **Infrastructure Boundaries**: Mesh = Route + Govern + Observe (NO intelligence)
 2. **Zero-Copy**: Mesh stores only metadata, never duplicates KB data
 3. **KB-Agnostic**: Pass queries unchanged; support any query language
-4. **Policy-First**: Response interception ensures no data leaks
+4. **Policy-First**: OPA evaluates access BEFORE query execution; field masking AFTER data retrieval
 5. **Message Broker Pattern**: Authorization in mesh, execution in adapters
 
 ---
@@ -1144,16 +1144,18 @@ External Services:
 
 ### 10.2 Response Interception vs Query Rewriting
 
-**Decision**: Response interception (mask after execution)
+**Decision**: Response interception (mask after KB execution, but access control BEFORE)
 
 **Why**:
+- Access control happens BEFORE query (prevents unauthorized DB hits)
+- Field masking happens AFTER KB returns data (for allowed requests)
 - Ensures no data leaks (even if KB misbehaves)
 - Avoids parsing every query language
 - Simpler policy rules (field masks vs query rewriting)
 - KB-agnostic enforcement
 
 **Trade-off**:
-- KB returns full data (network overhead)
+- KB returns full data (network overhead for masked fields)
 - Can't push-down filtering to KB
 
 ### 10.3 SQLite vs PostgreSQL for Persistence

@@ -115,8 +115,8 @@ Key Takeaways:
 ```
 
 **Key Concepts**:
-- **Response Interception**: KB returns full data, mesh masks before delivery
-- **Policy Enforcement**: OPA evaluates access in <10ms
+- **Policy Enforcement**: OPA evaluates access BEFORE query execution in <10ms
+- **Response Interception**: KB returns full data (for allowed requests), mesh masks before delivery
 - **Audit Trail**: Immutable logs with masked fields recorded
 - **Zero-Copy**: Mesh doesn't store customer data
 

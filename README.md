@@ -76,10 +76,11 @@ The mesh is a **routing + governance + observability** layer. Think of it as:
 
 ### Critical Decisions:
 1. **Pass-Through Queries**: Mesh forwards queries unchanged (SQL/Cypher/REST) to KB adapters
-2. **Response Interception**: Policy enforcement happens AFTER KBs return data
-3. **Lightweight Metadata**: Extensible schema starts simple (event type, timestamp, outcome)
-4. **Auto-Generated Tools**: MCP tools created automatically from KB adapter interfaces
-5. **NATS Messaging**: Real-time notifications and message broker for all communications
+2. **Pre-Query Policy Enforcement**: OPA evaluates access policies BEFORE DB queries execute
+3. **Response Interception**: Field-level masking applied AFTER KBs return data (for allowed requests)
+4. **Lightweight Metadata**: Extensible schema starts simple (event type, timestamp, outcome)
+5. **Auto-Generated Tools**: MCP tools created automatically from KB adapter interfaces
+6. **NATS Messaging**: Real-time notifications and message broker for all communications
 
 ---
 

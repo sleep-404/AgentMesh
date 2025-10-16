@@ -8,7 +8,7 @@ My approach centered on three core principles:
 
 ### 1. Zero-Copy Governance
 
-Rather than storing organizational knowledge, the mesh maintains only metadata (agent/KB registry, audit logs, policies). Knowledge lives in KBs where it belongs. The mesh enforces governance via **response interception**—masking sensitive fields after KBs return data but before delivery to requesters. This ensures no data leaks even if a KB misbehaves or returns more data than allowed.
+Rather than storing organizational knowledge, the mesh maintains only metadata (agent/KB registry, audit logs, policies). Knowledge lives in KBs where it belongs. The mesh enforces governance via a two-phase approach: **access control first** (OPA evaluates before query execution), then **response interception** (masking sensitive fields after KBs return data but before delivery to requesters). This ensures no unauthorized queries hit the database, and no data leaks even if a KB misbehaves or returns more data than allowed.
 
 ### 2. KB-Agnostic Routing
 
@@ -34,14 +34,15 @@ Direct database access for metadata queries leverages SQLite/PostgreSQL's native
 
 ### Policy Enforcement Point
 
-Response interception (vs. query rewriting) avoids parsing every query language and ensures no data leaks. The mesh doesn't need to understand SQL vs Cypher—it just masks the response according to policy. This makes the system KB-agnostic and secure by default.
+Policy evaluation happens BEFORE query execution, while response masking happens AFTER. This two-phase approach (authorize first, mask second) avoids parsing every query language and ensures no data leaks. The mesh doesn't need to understand SQL vs Cypher—it just evaluates access then masks the response according to policy. This makes the system KB-agnostic and secure by default.
 
 **Flow**:
-1. Agent sends query → Mesh checks policy → Allow with masking rules
-2. Mesh forwards query to KB (unchanged)
-3. KB returns full data (doesn't know about policies)
-4. Mesh applies field masks to response
-5. Mesh returns masked data to requester
+1. Agent sends query → Mesh checks policy (OPA) → Allow/Deny with masking rules
+2. If denied: Return error (KB never queried)
+3. If allowed: Mesh forwards query to KB (unchanged)
+4. KB returns full data (doesn't know about policies)
+5. Mesh applies field masks to response
+6. Mesh returns masked data to requester
 
 ### Message Broker Pattern
 
