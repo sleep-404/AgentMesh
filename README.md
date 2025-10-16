@@ -36,6 +36,18 @@ AgentMesh project - A flexible multi-layer adapter system for knowledge bases an
 - **Capability-Based Search**: Find agents by specific capabilities (e.g., "query_kb", "crew_orchestration")
 - **Automatic Caching**: Directory subscriber maintains hot cache loaded from persistence
 
+### Agent Connection Framework ✨ NEW
+- **REST & gRPC APIs**: Full-featured connection servers for agent registration (port 8080)
+- **Agent SDK**: Simple Python SDK with callback-based event handling
+- **Token Authentication**: Simple hardcoded token authentication for demo
+- **Unique Agent IDs**: Automatic ID generation and private NATS subject assignment
+- **Real-time Updates**: Agents notified of mesh changes (new agents, KBs, disconnections)
+- **Agent-to-Agent Communication**: Direct messaging via private NATS subjects
+- **Request-Reply Pattern**: Synchronous communication between agents
+- **Heartbeat Monitoring**: Automatic stale connection detection and cleanup
+- **KB Querying**: Agents can query knowledge bases through NATS
+- **Langraph Integration**: Reference implementation showing full mesh connectivity
+
 ### Integration & Developer Experience
 - **MCP Server Integration**: Expose adapters via Model Context Protocol for Claude Desktop
 - **Docker Integration**: Ready-to-use Docker configurations for local development (now includes NATS)
@@ -826,6 +838,399 @@ python dummy_agents/rest_server.py
 ```
 
 Then register them via MCP tools - the directory subscriber will broadcast their availability!
+
+## Agent Connection Framework ✨ NEW
+
+AgentMesh provides a comprehensive framework for agents to connect and communicate through the mesh. Agents can register, discover capabilities, query knowledge bases, and communicate with each other using a simple SDK.
+
+### Architecture Overview
+
+```
+External Agent
+    ↓ (REST/gRPC)
+Connection API Server (:8080)
+    ↓ (assigns ID, subjects, token auth)
+NATS Messaging Layer (:4222)
+    ├→ Global Subjects (mesh.updates.*)
+    ├→ Private Subject (agent.<id>)
+    └→ KB Subjects (<kb_id>.adapter.query)
+           ↓
+    Knowledge Base Adapters
+```
+
+### Key Features
+
+**✅ Agent Registration & Authentication:**
+- Simple token-based authentication (hardcoded tokens for demo)
+- Unique agent ID assignment by mesh
+- Private NATS subject for direct communication
+- Global NATS subjects for mesh-wide updates
+
+**✅ REST & gRPC APIs:**
+- REST API server on port 8080 (FastAPI)
+- gRPC server with protocol buffers
+- Health checks and heartbeat monitoring
+- Connection lifecycle management
+
+**✅ Agent SDK:**
+- Simple Python SDK for agent connectivity
+- Callback-based event handling
+- Automatic subscription management
+- Request-reply pattern support
+
+**✅ Real-time Notifications:**
+- Agents notified when new agents register
+- Agents notified when new KBs register
+- Agents notified when other agents disconnect
+- Automatic discovery of mesh capabilities
+
+**✅ Direct Agent-to-Agent Communication:**
+- Send messages to other agents via their private subjects
+- Request-reply pattern for synchronous communication
+- Fire-and-forget for async notifications
+
+### Quick Start
+
+#### 1. Start the Connection API Server
+
+```bash
+# Terminal 1: Start NATS
+docker-compose up -d nats
+
+# Terminal 2: Start REST API server
+cd /Users/jeevan/AgentMesh
+source .venv/bin/activate
+PYTHONPATH=/Users/jeevan/AgentMesh python api/rest_server.py
+```
+
+The server will start on `http://localhost:8080` with the following endpoints:
+- `POST /connect` - Connect an agent to the mesh
+- `POST /disconnect` - Disconnect an agent
+- `POST /heartbeat` - Send heartbeat
+- `GET /agents` - List connected agents
+- `GET /health` - Health check
+
+#### 2. Using the Agent SDK
+
+```python
+from sdk.agent_client import AgentClient, AgentCallbacks
+from typing import Any
+
+# Implement callbacks for handling mesh events
+class MyAgentCallbacks(AgentCallbacks):
+    async def on_agent_registered(self, agent_data: dict[str, Any]) -> None:
+        print(f"New agent joined: {agent_data['identity']}")
+
+    async def on_kb_registered(self, kb_data: dict[str, Any]) -> None:
+        print(f"New KB available: {kb_data['kb_id']}")
+
+    async def on_agent_disconnected(self, agent_data: dict[str, Any]) -> None:
+        print(f"Agent left: {agent_data['agent_id']}")
+
+    async def on_direct_message(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        print(f"Received message: {message}")
+        # Return a response if needed (request-reply pattern)
+        return {"status": "received", "processed": True}
+
+# Create agent client
+callbacks = MyAgentCallbacks()
+client = AgentClient(
+    mesh_endpoint="http://localhost:8080/connect",
+    agent_endpoint="http://localhost:8001",  # Your agent's endpoint
+    token="demo-token",  # Simple hardcoded token
+    callbacks=callbacks,
+    metadata={"type": "analytics", "version": "1.0.0"}
+)
+
+# Connect to mesh
+connection = await client.connect()
+print(f"Connected as: {connection['agent_id']}")
+print(f"Private subject: {connection['private_subject']}")
+print(f"Global subjects: {connection['global_subjects']}")
+
+# Send message to another agent
+await client.send_message_to_agent(
+    target_agent_id="agent-123",
+    message={"action": "process_data", "data": {...}}
+)
+
+# Request from another agent (with response)
+response = await client.request_from_agent(
+    target_agent_id="agent-123",
+    request_data={"query": "get_status"}
+)
+
+# Disconnect when done
+await client.disconnect()
+```
+
+#### 3. Langraph Agent with Mesh Connectivity
+
+The updated `LangraphAgent` demonstrates full mesh integration:
+
+```python
+from dummy_agents.agents.langraph_agent import LangraphAgent
+
+# Create agent with mesh connectivity
+agent = LangraphAgent(
+    task="Analyze sales data and generate report",
+    connect_to_mesh=True  # Enable mesh connectivity
+)
+
+# Execute - automatically connects, discovers, queries KBs, and disconnects
+result = agent.execute()
+
+print(f"Status: {result['status']}")
+print(f"Result: {result['result']}")
+print(f"Mesh data: {result['mesh_data']}")
+```
+
+**What happens during execution:**
+1. ✅ Agent connects to mesh and receives unique ID
+2. ✅ Agent subscribes to global and private NATS subjects
+3. ✅ Agent discovers available agents and KBs
+4. ✅ Agent queries KB via NATS (e.g., PostgreSQL)
+5. ✅ Agent processes data using Langraph workflow
+6. ✅ Agent disconnects cleanly
+
+### API Endpoints
+
+**POST /connect**
+```json
+Request:
+{
+  "endpoint": "http://localhost:8001",
+  "token": "demo-token",
+  "metadata": {"type": "analytics"}
+}
+
+Response:
+{
+  "agent_id": "agent-20251016075843-985b0cb2",
+  "private_subject": "agent.agent-20251016075843-985b0cb2",
+  "global_subjects": [
+    "mesh.updates.agents",
+    "mesh.updates.kbs",
+    "mesh.updates.all"
+  ],
+  "connection_status": "connected",
+  "connected_at": "2025-10-16T07:58:43Z",
+  "message": "Successfully connected to mesh"
+}
+```
+
+**POST /disconnect**
+```json
+Request:
+{
+  "agent_id": "agent-20251016075843-985b0cb2",
+  "reason": "Task completed"
+}
+
+Response:
+{
+  "status": "success",
+  "message": "Agent disconnected"
+}
+```
+
+**POST /heartbeat**
+```json
+Request:
+{
+  "agent_id": "agent-20251016075843-985b0cb2",
+  "timestamp": "2025-10-16T07:58:43Z",
+  "status": "active",
+  "metadata": {}
+}
+
+Response:
+{
+  "status": "ok",
+  "message": "Heartbeat acknowledged"
+}
+```
+
+**GET /agents**
+```json
+Response:
+{
+  "agents": [
+    {
+      "agent_id": "agent-20251016075843-985b0cb2",
+      "endpoint": "http://localhost:8001",
+      "private_subject": "agent.agent-20251016075843-985b0cb2",
+      "connected_at": "2025-10-16T07:58:43Z",
+      "last_heartbeat": "2025-10-16T07:59:13Z",
+      "metadata": {"type": "analytics"}
+    }
+  ],
+  "count": 1
+}
+```
+
+### NATS Subjects
+
+**Private Subject (per agent):**
+- Format: `agent.<agent_id>`
+- Example: `agent.agent-20251016075843-985b0cb2`
+- Used for: Direct agent-to-agent communication
+
+**Global Subjects (broadcast):**
+- `mesh.updates.agents` - Agent registration/disconnection events
+- `mesh.updates.kbs` - KB registration/removal events
+- `mesh.updates.all` - All mesh updates
+
+**KB Subjects (request-reply):**
+- Format: `<kb_id>.adapter.query`
+- Example: `postgres-kb-1.adapter.query`
+- Used for: Querying knowledge bases through the mesh
+
+### Message Formats
+
+**Agent Connected Notification:**
+```json
+{
+  "update_type": "agent_connected",
+  "timestamp": "2025-10-16T07:58:43Z",
+  "data": {
+    "agent_id": "agent-20251016075843-985b0cb2",
+    "endpoint": "http://localhost:8001",
+    "metadata": {"type": "analytics"}
+  }
+}
+```
+
+**Direct Message (Agent-to-Agent):**
+```json
+{
+  "from_agent_id": "agent-123",
+  "to_agent_id": "agent-456",
+  "message_type": "request",  // or "notification"
+  "payload": {"action": "process", "data": {...}},
+  "timestamp": "2025-10-16T07:58:43Z"
+}
+```
+
+### Configuration
+
+**Valid Authentication Tokens** (defined in `services/connection/connection_service.py`):
+- `mesh-agent-token-001`
+- `mesh-agent-token-002`
+- `demo-token`
+- `test-token`
+
+**Connection Monitoring:**
+- Heartbeat interval: 30 seconds (recommended)
+- Stale connection threshold: 60 seconds (2x heartbeat interval)
+- Automatic cleanup of stale connections
+
+### Testing
+
+Run the integration tests to verify the framework:
+
+```bash
+# Run agent connection tests
+pytest tests/test_agent_mesh_connection.py -v
+
+# Run the langraph agent with mesh connectivity
+python -c "
+from dummy_agents.agents.langraph_agent import LangraphAgent
+agent = LangraphAgent(task='Test mesh', connect_to_mesh=True)
+result = agent.execute()
+print(result)
+"
+```
+
+### Project Structure (Connection Framework)
+
+```
+api/
+├── __init__.py
+├── rest_server.py              # REST API server (FastAPI)
+├── grpc_server.py              # gRPC server
+├── generate_grpc.py            # gRPC code generator
+└── protos/
+    ├── connection_service.proto   # Protocol buffers definition
+    └── __init__.py
+
+sdk/
+├── __init__.py
+└── agent_client.py             # Agent SDK with callbacks
+
+services/connection/
+├── __init__.py
+├── connection_service.py       # Connection management service
+└── schemas.py                  # Connection schemas
+
+dummy_agents/agents/
+└── langraph_agent.py           # Updated with mesh connectivity
+
+tests/
+├── test_agent_mesh_connection.py  # Connection tests
+└── run_integration_test.py        # Integration test runner
+```
+
+### What's Implemented
+
+**✅ Core Connection Framework:**
+- Token-based authentication
+- Unique agent ID generation
+- NATS subject assignment and management
+- Connection lifecycle (connect, heartbeat, disconnect)
+
+**✅ API Servers:**
+- REST API server (FastAPI) on port 8080
+- gRPC server with proto definitions
+- Health checks and monitoring
+
+**✅ Agent SDK:**
+- Simple Python client for agent connectivity
+- Abstract callback interface for event handling
+- Automatic NATS subscription management
+- Request-reply pattern support
+
+**✅ Langraph Integration:**
+- Updated agent with mesh connectivity
+- Dynamic capability discovery
+- KB query functionality via NATS
+- Clean connection/disconnection
+
+**✅ Testing:**
+- Comprehensive integration tests
+- Verified agent connection and KB queries
+- REST API and NATS logs validated
+
+### Example: Complete Flow
+
+```python
+# 1. Start services
+# docker-compose up -d nats postgres neo4j
+# python api/rest_server.py
+# python mcp_server/server.py
+
+# 2. Agent connects and queries KB
+from dummy_agents.agents.langraph_agent import LangraphAgent
+
+agent = LangraphAgent(
+    task="Query sales data from PostgreSQL",
+    connect_to_mesh=True
+)
+
+result = agent.execute()
+
+# Output:
+# INFO: [MESH] Connected as: agent-20251016075843-985b0cb2
+# INFO: [MESH] Found 1 connected agents
+# INFO: [MESH] Registered 2 KBs as tools
+# INFO: [MESH] Querying KB 'postgres-kb-1' with operation 'sql_query'
+# INFO: [MESH] KB query response: {'status': 'success', 'data': {'rows': [...]}}
+# INFO: [MESH] Disconnected from mesh
+
+print(f"Status: {result['status']}")  # completed
+print(f"KB Query: {result['mesh_data']['kb_query_result']}")
+# {'status': 'success', 'data': {'rows': [{'test': 1}], 'row_count': 1}}
+```
 
 ## MCP Server Integration
 
