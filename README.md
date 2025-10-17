@@ -1,6 +1,6 @@
 # AgentMesh: Governed Orchestration Infrastructure (Updating this- Requesting some time)
 > A routing and governance layer that enables secure, policy-driven access
-> to distributed knowledge bases without storing organizational knowledge itself.
+> to distributed knowledge bases and agents- without storing organizational knowledge itself.
 
 High Level Architecture
 ![High Level Architecture](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/high.jpeg)
