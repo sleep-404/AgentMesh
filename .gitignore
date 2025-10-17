@@ -2,9 +2,9 @@ TODO
 __pycache__
 .venv
 .env
-*.png
-*.jpg
-*.jpeg
+# *.png
+# *.jpg
+# *.jpeg
 *.gif
 output/
 checkpoints/
