@@ -2,6 +2,41 @@
 > A routing and governance layer that enables secure, policy-driven access
 > to distributed knowledge bases without storing organizational knowledge itself.
 
+
+
+### For Users:
+1. ✅ **Directory & Observability Dashboard**
+   - View all registered agents: identity, capabilities, health status, last active
+   [Workflow](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/user-1.1.jpeg)
+
+   - View all registered KBs: type, schema, supported operations, health status
+   - View activity logs: who accessed what, when, outcome (success/denied)
+   - View audit trails: complete transaction history with timestamps
+
+2. ✅ **Policy Management Interface**
+   - Define RBAC policies: which principals can access which resources
+   - Define ABAC policies: field-level rules, masking conditions, purpose-of-use bindings
+   - Set policy precedence: deny overrides permit
+   - *(Optional - Future)* Test policies in simulation mode before activation
+   - Activate policies—mesh stores and uses for lookups
+
+3. ✅ **Multi-Source Query Coordination**
+   - User's reasoning system sends queries to mesh: "Query KB-1 and KB-3 for Feature Y timeline"
+   - Mesh performs policy lookup for each target KB
+   - Mesh forwards queries (with optional filtering if supported)
+   - Mesh receives responses and masks fields per user's access level
+   - Mesh returns masked responses from all KBs to user's reasoning system
+   - User's reasoning system analyzes, synthesizes, detects contradictions (NOT the mesh)
+
+4. ✅ **Audit & Compliance Reporting**
+   - Query audit logs: "Show all Sales KB accesses in Q4"
+   - Export audit trails for compliance
+   - View denied access attempts with reasons
+   - Track policy evaluation outcomes
+
+
+
+
 ## 🎯 Quick Links
 - [Architecture Overview](#-architecture-overview)
 - [Core Design Decisions](#-design-philosophy)
