@@ -1,6 +1,8 @@
 # AgentMesh: Governed Orchestration Infrastructure (Updating this- Requesting some time)
-> A routing and governance layer that enables secure, policy-driven access
-> to distributed knowledge bases and agents- without storing organizational knowledge itself.
+
+AgentMesh is a governed orchestration infrastructure that enables secure collaboration between agents and knowledge bases across an organization. The mesh acts as a routing and governance layer rather than a knowledge repository—it doesn't store organizational data, but instead mediates access, enforces policies, maintains audit trails, and provides observability.
+
+Key Concept: The mesh is infrastructure, not intelligence. Knowledge lives in KBs, intelligence lives in agents and user reasoning systems, and the mesh provides the governed pathways between them.
 
 High Level Architecture
 ![High Level Architecture](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/high.jpeg)
@@ -8,8 +10,6 @@ High Level Architecture
 ### For Users:
 1. ✅ **Directory & Observability Dashboard**
    - View all registered agents: identity, capabilities, health status, last active
-   ![Workflow](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/user-1.1.jpeg)
-
    - View all registered KBs: type, schema, supported operations, health status
    - View activity logs: who accessed what, when, outcome (success/denied)
    - View audit trails: complete transaction history with timestamps
