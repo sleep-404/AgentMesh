@@ -7,7 +7,7 @@
 ### For Users:
 1. ✅ **Directory & Observability Dashboard**
    - View all registered agents: identity, capabilities, health status, last active
-   [Workflow](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/user-1.1.jpeg)
+   ![Workflow](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/user-1.1.jpeg)
 
    - View all registered KBs: type, schema, supported operations, health status
    - View activity logs: who accessed what, when, outcome (success/denied)
