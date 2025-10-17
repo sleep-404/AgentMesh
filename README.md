@@ -14,7 +14,7 @@
 ## 🏗️ Architecture Overview (WIP)
 
 High Level Architecture
-![High Level Architecture](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/high-level.jpeg)
+![High Level Architecture](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/high.jpeg)
 
 
 ### Agent-to-Knowledge Base Interaction
