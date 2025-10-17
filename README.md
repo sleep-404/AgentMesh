@@ -2,7 +2,8 @@
 > A routing and governance layer that enables secure, policy-driven access
 > to distributed knowledge bases without storing organizational knowledge itself.
 
-
+High Level Architecture
+![High Level Architecture](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/high.jpeg)
 
 ### For Users:
 1. ✅ **Directory & Observability Dashboard**
@@ -47,9 +48,6 @@
 ---
 
 ## 🏗️ Architecture Overview (WIP)
-
-High Level Architecture
-![High Level Architecture](https://raw.githubusercontent.com/sleep-404/AgentMesh/main/assets/high.jpeg)
 
 
 ### Agent-to-Knowledge Base Interaction
